@@ -348,7 +348,7 @@ function AccountDetail({
         {hasApiBalance ? (
           <span className="source-pill api-key">API Balance</span>
         ) : null}
-        {snapshot && !tokenPlanLabel && !snapshot.balance ? <span>No quota data</span> : null}
+        {snapshot && !tokenPlanLabel && !hasApiBalance ? <span>No quota data</span> : null}
         {!snapshot ? <span>No usage snapshot yet</span> : null}
         <span>{account.isDefault ? 'Default account' : 'Secondary account'}</span>
       </div>
@@ -357,7 +357,7 @@ function AccountDetail({
 
       {snapshot ? (
         <>
-          {snapshot.balance ? <BalanceOverview balance={snapshot.balance} /> : null}
+          {hasApiBalance && snapshot.balance ? <BalanceOverview balance={snapshot.balance} /> : null}
           <TokenUsageSection snapshot={snapshot} />
         </>
       ) : (
