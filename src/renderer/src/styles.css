@@ -392,6 +392,10 @@ button:disabled {
   padding: 24px;
 }
 
+.empty-state .button {
+  min-width: 156px;
+}
+
 .empty-detail.inline {
   min-height: 220px;
   border: 1px dashed #cfd6dd;

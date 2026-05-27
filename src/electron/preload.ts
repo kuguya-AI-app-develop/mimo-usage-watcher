@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('mimo', {
   load: () => ipcRenderer.invoke('dashboard:load'),
   refreshAll: () => ipcRenderer.invoke('dashboard:refreshAll'),
+  openExternalLogin: () => ipcRenderer.invoke('auth:openExternalLogin'),
   login: (input?: { name?: string; label?: string }) => ipcRenderer.invoke('account:login', input),
   addFromCookie: (input: { name: string; label?: string; cookieHeader: string }) =>
     ipcRenderer.invoke('account:addFromCookie', input),

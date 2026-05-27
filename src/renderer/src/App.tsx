@@ -3,6 +3,7 @@ import {
   CircleAlert,
   CircleCheck,
   ClipboardPaste,
+  ExternalLink,
   LogIn,
   Pencil,
   RefreshCw,
@@ -114,6 +115,13 @@ export function App(): React.ReactElement {
     });
   }
 
+  async function openDefaultBrowserLogin(): Promise<void> {
+    await run(async () => {
+      await unwrap(await window.mimo.openExternalLogin());
+      setStatus('Opened Xiaomi login in your default browser. After login, use Paste Cookie to import it here.');
+    });
+  }
+
   async function pasteCookie(input: { name: string; label?: string; cookieHeader: string }): Promise<void> {
     await run(async () => {
       const next = await unwrap(await window.mimo.addFromCookie(input));
@@ -141,9 +149,13 @@ export function App(): React.ReactElement {
             <ClipboardPaste size={17} />
             Paste Cookie
           </button>
+          <button className="button secondary" onClick={() => void openDefaultBrowserLogin()} disabled={busy}>
+            <ExternalLink size={17} />
+            Browser Login
+          </button>
           <button className="button primary" onClick={() => void login()} disabled={busy}>
             <LogIn size={17} />
-            Login Account
+            Login & Import
           </button>
         </div>
       </header>
@@ -172,7 +184,11 @@ export function App(): React.ReactElement {
                 <p>No MiMo accounts are saved locally.</p>
                 <button className="button primary" onClick={() => void login()} disabled={busy}>
                   <LogIn size={17} />
-                  Login Account
+                  Login & Import
+                </button>
+                <button className="button secondary" onClick={() => void openDefaultBrowserLogin()} disabled={busy}>
+                  <ExternalLink size={17} />
+                  Browser Login
                 </button>
               </div>
             ) : (
@@ -203,7 +219,7 @@ export function App(): React.ReactElement {
             <div className="empty-detail">
               <CircleCheck size={30} />
               <h2>No account selected</h2>
-              <p>Use Login Account to add a Xiaomi MiMo account and fetch its token plan usage.</p>
+              <p>Use Login & Import to add a Xiaomi MiMo account and fetch its token plan usage.</p>
             </div>
           )}
         </section>

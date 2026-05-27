@@ -1,7 +1,9 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions, type Session, session } from 'electron';
-import { PLATFORM_ORIGIN } from '../constants.js';
+import { LOGIN_ENTRY_URL, PLATFORM_ORIGIN } from '../constants.js';
 import type { MimoCookieSet } from '../types.js';
 import { type BrowserCookie, cookieHeaderFromBrowserCookies } from '../utils/cookies.js';
+
+const activeLoginWindows = new Set<BrowserWindow>();
 
 export interface ElectronLoginOptions {
   accountId: string;
@@ -19,9 +21,13 @@ export async function waitForElectronLogin(options: ElectronLoginOptions): Promi
     cache: true
   });
   const loginWindow = createLoginWindow(options, loginSession);
+  activeLoginWindows.add(loginWindow);
+  loginWindow.once('closed', () => {
+    activeLoginWindows.delete(loginWindow);
+  });
 
   options.onStatus?.('Opening Xiaomi MiMo login window...');
-  await loginWindow.loadURL(PLATFORM_ORIGIN);
+  await loginWindow.loadURL(LOGIN_ENTRY_URL);
   options.onStatus?.('Complete Xiaomi login in the popup window.');
 
   try {
@@ -48,6 +54,7 @@ export async function waitForElectronLogin(options: ElectronLoginOptions): Promi
     if (!loginWindow.isDestroyed()) {
       loginWindow.close();
     }
+    activeLoginWindows.delete(loginWindow);
   }
 }
 

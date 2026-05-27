@@ -15,6 +15,7 @@ export type GuiApiResponse<T> = GuiApiResult<T> | GuiApiError;
 export interface MimoGuiApi {
   load(): Promise<GuiApiResponse<AppConfig>>;
   refreshAll(): Promise<GuiApiResponse<AppConfig>>;
+  openExternalLogin(): Promise<GuiApiResponse<string>>;
   login(input?: { name?: string; label?: string }): Promise<GuiApiResponse<AppConfig>>;
   addFromCookie(input: { name: string; label?: string; cookieHeader: string }): Promise<GuiApiResponse<AppConfig>>;
   setDefault(accountId: string): Promise<GuiApiResponse<AppConfig>>;

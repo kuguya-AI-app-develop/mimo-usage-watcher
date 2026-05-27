@@ -1,6 +1,7 @@
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, shell } from 'electron';
 import { AccountService, createAccountId } from '../accounts.js';
 import { ConfigStore } from '../config.js';
+import { LOGIN_ENTRY_URL } from '../constants.js';
 import { waitForElectronLogin } from './login-window.js';
 
 export interface GuiApiResult<T> {
@@ -18,6 +19,12 @@ export type GuiApiResponse<T> = GuiApiResult<T> | GuiApiError;
 export function registerIpcHandlers(service: AccountService, getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle('dashboard:load', async () => wrap(() => service.load()));
   ipcMain.handle('dashboard:refreshAll', async () => wrap(() => service.refreshAll()));
+  ipcMain.handle('auth:openExternalLogin', async () =>
+    wrap(async () => {
+      await shell.openExternal(LOGIN_ENTRY_URL);
+      return LOGIN_ENTRY_URL;
+    })
+  );
 
   ipcMain.handle('account:setDefault', async (_event, accountId: string) => wrap(() => service.setDefault(accountId)));
   ipcMain.handle('account:renameLabel', async (_event, accountId: string, label: string) =>
