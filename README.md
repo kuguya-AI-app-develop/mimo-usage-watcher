@@ -1,43 +1,41 @@
-# Xiaomi MiMo Watcher
+# MiMo Plan Watcher
 
-Terminal UI for monitoring token-plan usage across multiple Xiaomi MiMo accounts.
+Desktop GUI for monitoring Xiaomi MiMo token-plan usage across multiple accounts.
 
 ## Development
 
 ```sh
 pnpm install
-pnpm exec playwright install chromium
 pnpm dev
 ```
 
-The default command opens a TUI dashboard. Account cookies are stored in the
-macOS Keychain under the `xiaomi-mimo-watcher` service. Non-sensitive metadata
-and usage snapshots are stored in `~/.mimo-watcher/config.json`.
+`pnpm dev` launches the Electron GUI. The Login Account button opens a separate
+Xiaomi MiMo login window directly. After login succeeds, the app collects the
+MiMo platform cookies from that isolated Electron session, validates them
+against the usage API, auto-names the account from `userId`, and stores the
+account metadata locally.
 
-If Google Chrome is already installed, browser login can use it as a fallback.
-Installing Playwright's Chromium keeps the login flow independent of your normal
-browser profiles.
+## Storage
+
+- Sensitive cookie headers are stored in macOS Keychain under the
+  `xiaomi-mimo-watcher` service.
+- Non-sensitive metadata and usage snapshots are stored in
+  `~/.mimo-watcher/config.json`.
+- Electron browser login state is stored under `~/.mimo-watcher/electron`.
+
+The app does not read Chrome or Safari profiles and does not store Xiaomi
+account passwords.
 
 ## Commands
 
 ```sh
-pnpm dev
-pnpm build
+pnpm dev          # Electron GUI
+pnpm build        # TypeScript + renderer production build
+pnpm start        # Run the built Electron GUI
 pnpm test
+pnpm typecheck
+pnpm dev:tui      # Legacy terminal UI
 ```
 
-Inside the TUI:
-
-- `a`: add an account through a controlled browser login
-- `p`: paste a cookie manually
-- `r`: refresh usage
-- `u`: mark selected account as default
-- `e`: edit label
-- `d`: delete account
-- `/`: search
-- `i`: details
-- `?`: help
-- `q`: quit
-
-The tool never reads existing Chrome or Safari profiles and does not store
-Xiaomi account passwords.
+The GUI also supports manual cookie import for recovery/testing, but browser
+login is the primary path.
