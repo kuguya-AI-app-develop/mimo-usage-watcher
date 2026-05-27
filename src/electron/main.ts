@@ -11,7 +11,7 @@ const service = createGuiAccountService(dataDir);
 let mainWindow: BrowserWindow | null = null;
 const electronUserDataDir = join(dataDir, 'electron');
 
-app.setName('MiMo Plan Watcher');
+app.setName('MiMo Usage Watcher');
 mkdirSync(electronUserDataDir, { recursive: true, mode: 0o700 });
 app.setPath('userData', electronUserDataDir);
 
@@ -23,7 +23,7 @@ async function createWindow(): Promise<void> {
     height: 780,
     minWidth: 980,
     minHeight: 640,
-    title: 'MiMo Plan Watcher',
+    title: 'MiMo Usage Watcher',
     backgroundColor: '#f6f7f9',
     show: false,
     webPreferences: {

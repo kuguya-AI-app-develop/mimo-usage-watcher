@@ -212,7 +212,7 @@ async function fetchJson(options: FetchUsageOptions, url: string, label: string)
       headers: {
         accept: 'application/json',
         cookie: options.cookieHeader,
-        'user-agent': 'xiaomi-mimo-watcher/0.1'
+        'user-agent': 'mimo-usage-watcher/0.1'
       }
     });
   } catch (error) {

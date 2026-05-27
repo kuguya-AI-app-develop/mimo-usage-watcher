@@ -1,6 +1,6 @@
-# MiMo Plan Watcher
+# MiMo Usage Watcher
 
-Desktop GUI for monitoring Xiaomi MiMo token-plan usage across multiple accounts.
+Desktop GUI for monitoring Xiaomi MiMo token-plan usage and API key balance across multiple accounts.
 
 ## Development
 
@@ -39,6 +39,9 @@ pnpm test
 pnpm typecheck
 pnpm dev:tui      # Legacy terminal UI
 ```
+
+The package is named `mimo-usage-watcher`; the legacy `mimo-watcher` bin is
+kept as an alias.
 
 The dashboard refreshes saved accounts automatically every
 `refreshIntervalSeconds` seconds, in addition to the manual Refresh button. It

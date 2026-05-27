@@ -1,4 +1,4 @@
-export const APP_NAME = 'xiaomi-mimo-watcher';
+export const APP_NAME = 'mimo-usage-watcher';
 export const KEYCHAIN_SERVICE = 'xiaomi-mimo-watcher';
 export const DEFAULT_CONFIG_DIR_NAME = '.mimo-watcher';
 export const PLATFORM_ORIGIN = 'https://platform.xiaomimimo.com';

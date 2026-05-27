@@ -153,7 +153,7 @@ export function App(): React.ReactElement {
       <header className="topbar">
         <div>
           <div className="eyebrow">Xiaomi MiMo</div>
-          <h1>Plan Watcher</h1>
+          <h1>Usage Watcher</h1>
         </div>
         <div className="topbar-actions">
           <button className="button secondary" onClick={() => void refreshAll()} disabled={busy || config.accounts.length === 0}>
@@ -317,6 +317,7 @@ function AccountDetail({
   onDelete: () => void;
 }): React.ReactElement {
   const tokenPlanLabel = snapshot ? resolveTokenPlanLabel(snapshot) : undefined;
+  const hasApiBalance = snapshot?.balance ? balanceAvailable(snapshot.balance) > 0 : false;
 
   return (
     <>
@@ -344,8 +345,8 @@ function AccountDetail({
         {tokenPlanLabel ? (
           <span className={`source-pill token-plan ${snapshot?.tokenPlan?.expired ? 'expired' : ''}`}>{tokenPlanLabel}</span>
         ) : null}
-        {snapshot?.balance ? (
-          <span className="source-pill api-key">API Balance {formatMoney(snapshot.balance.balance, snapshot.balance.currency)}</span>
+        {hasApiBalance ? (
+          <span className="source-pill api-key">API Balance</span>
         ) : null}
         {snapshot && !tokenPlanLabel && !snapshot.balance ? <span>No quota data</span> : null}
         {!snapshot ? <span>No usage snapshot yet</span> : null}
@@ -357,10 +358,7 @@ function AccountDetail({
       {snapshot ? (
         <>
           {snapshot.balance ? <BalanceOverview balance={snapshot.balance} /> : null}
-          <div className="usage-grid">
-            <UsageSection title="Month Usage" buckets={snapshot.monthUsage} />
-            <UsageSection title="Plan Usage" buckets={snapshot.planUsage} />
-          </div>
+          <TokenUsageSection snapshot={snapshot} />
         </>
       ) : (
         <div className="empty-detail inline">
@@ -408,19 +406,25 @@ function QuotaMetric({ label, value }: { label: string; value: string }): React.
   );
 }
 
-function UsageSection({ title, buckets }: { title: string; buckets: TokenBucket[] }): React.ReactElement {
-  const visibleBuckets = buckets.filter(shouldShowBucket);
+interface DisplayBucket {
+  key: string;
+  label: string;
+  bucket: TokenBucket;
+}
+
+function TokenUsageSection({ snapshot }: { snapshot: UsageSnapshot }): React.ReactElement {
+  const visibleBuckets = tokenUsageBuckets(snapshot);
 
   return (
     <section className="usage-section">
-      <h3>{title}</h3>
+      <h3>Token Plan Usage</h3>
       {visibleBuckets.length === 0 ? (
         <p className="muted">No buckets returned.</p>
       ) : (
-        visibleBuckets.map((bucket) => (
-          <div className="bucket-row" key={bucket.name}>
+        visibleBuckets.map(({ key, label, bucket }) => (
+          <div className="bucket-row" key={key}>
             <div className="bucket-header">
-              <span title={bucketHelp(bucket.name)}>{bucketLabel(bucket.name)}</span>
+              <span title={bucketHelp(bucket.name)}>{label}</span>
               <strong>{bucket.percent}%</strong>
             </div>
             <div className="progress-track">
@@ -594,6 +598,50 @@ function planCodeLabel(planCode: string): string {
 
 function shouldShowBucket(bucket: TokenBucket): boolean {
   return !(bucket.name === 'compensation_total_token' && bucket.limit === 0);
+}
+
+function tokenUsageBuckets(snapshot: UsageSnapshot): DisplayBucket[] {
+  const monthBuckets = snapshot.monthUsage.filter(shouldShowBucket);
+  const planBuckets = snapshot.planUsage.filter(shouldShowBucket);
+  const monthTotal = monthBuckets.find((bucket) => bucket.name === 'month_total_token');
+  const planTotal = planBuckets.find((bucket) => bucket.name === 'plan_total_token');
+  const consumed = new Set<TokenBucket>();
+  const rows: DisplayBucket[] = [];
+
+  if (monthTotal && planTotal && isSameQuotaBucket(monthTotal, planTotal)) {
+    rows.push({
+      key: 'token_plan_total',
+      label: 'Token plan total',
+      bucket: bucketWithBestPercent(monthTotal, planTotal)
+    });
+    consumed.add(monthTotal);
+    consumed.add(planTotal);
+  }
+
+  for (const bucket of monthBuckets) {
+    if (!consumed.has(bucket)) {
+      rows.push({ key: `month:${bucket.name}`, label: bucketLabel(bucket.name), bucket });
+    }
+  }
+
+  for (const bucket of planBuckets) {
+    if (!consumed.has(bucket)) {
+      rows.push({ key: `plan:${bucket.name}`, label: bucketLabel(bucket.name), bucket });
+    }
+  }
+
+  return rows;
+}
+
+function isSameQuotaBucket(left: TokenBucket, right: TokenBucket): boolean {
+  return left.used === right.used && left.limit === right.limit && left.remaining === right.remaining;
+}
+
+function bucketWithBestPercent(left: TokenBucket, right: TokenBucket): TokenBucket {
+  return {
+    ...right,
+    percent: Math.max(left.percent, right.percent)
+  };
 }
 
 function bucketLabel(name: string): string {
