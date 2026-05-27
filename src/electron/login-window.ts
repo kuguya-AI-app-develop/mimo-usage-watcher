@@ -1,7 +1,12 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions, type Session, session } from 'electron';
 import { LOGIN_ENTRY_URL, PLATFORM_ORIGIN } from '../constants.js';
 import type { MimoCookieSet } from '../types.js';
-import { type BrowserCookie, cookieHeaderFromBrowserCookies } from '../utils/cookies.js';
+import {
+  type BrowserCookie,
+  cookieValuesFromBrowserCookies,
+  parseCookieHeader,
+  validateMimoCookieValues
+} from '../utils/cookies.js';
 
 const activeLoginWindows = new Set<BrowserWindow>();
 
@@ -20,6 +25,8 @@ export async function waitForElectronLogin(options: ElectronLoginOptions): Promi
   const loginSession = session.fromPartition(loginPartition(options.accountId), {
     cache: true
   });
+  const capturedPlatformCookies: Record<string, string> = {};
+  capturePlatformRequestCookies(loginSession, capturedPlatformCookies);
   const loginWindow = createLoginWindow(options, loginSession);
   activeLoginWindows.add(loginWindow);
   loginWindow.once('closed', () => {
@@ -41,7 +48,7 @@ export async function waitForElectronLogin(options: ElectronLoginOptions): Promi
 
       const cookies = await loginSession.cookies.get({ url: PLATFORM_ORIGIN });
       try {
-        return cookieHeaderFromBrowserCookies(cookies as BrowserCookie[]);
+        return buildCookieSet(capturedPlatformCookies, cookies as BrowserCookie[]);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
       }
@@ -79,6 +86,32 @@ function createLoginWindow(options: ElectronLoginOptions, loginSession: Session)
   };
 
   return new BrowserWindow(windowOptions);
+}
+
+function capturePlatformRequestCookies(loginSession: Session, target: Record<string, string>): void {
+  loginSession.webRequest.onBeforeSendHeaders({ urls: [`${PLATFORM_ORIGIN}/*`] }, (details, callback) => {
+    const cookieHeader = readHeader(details.requestHeaders, 'cookie');
+    if (cookieHeader) {
+      Object.assign(target, parseCookieHeader(cookieHeader));
+    }
+    callback({ requestHeaders: details.requestHeaders });
+  });
+}
+
+function buildCookieSet(capturedValues: Record<string, string>, cookies: BrowserCookie[]): MimoCookieSet {
+  return validateMimoCookieValues({
+    ...capturedValues,
+    ...cookieValuesFromBrowserCookies(cookies)
+  });
+}
+
+function readHeader(headers: Record<string, string | string[]>, name: string): string | undefined {
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === name);
+  const value = entry?.[1];
+  if (Array.isArray(value)) {
+    return value.join('; ');
+  }
+  return value;
 }
 
 function delay(ms: number): Promise<void> {

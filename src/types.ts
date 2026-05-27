@@ -27,11 +27,22 @@ export interface TokenBucket {
   remaining: number;
 }
 
+export type QuotaSource = 'token_plan' | 'api_key' | 'mixed' | 'unknown';
+
+export interface QuotaSummary {
+  source: QuotaSource;
+  used: number;
+  limit: number;
+  percent: number;
+  remaining: number;
+}
+
 export interface UsageSnapshot {
   accountId: string;
   fetchedAt: string;
   monthUsage: TokenBucket[];
   planUsage: TokenBucket[];
+  quotaSummary: QuotaSummary;
   overallPercent: number;
   status: UsageStatus;
 }

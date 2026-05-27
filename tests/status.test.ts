@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateUsageStatus, normalizeBucket, snapshotWithStatus } from '../src/utils/status.js';
+import { calculateUsageStatus, normalizeBucket, snapshotWithStatus, summarizeQuota } from '../src/utils/status.js';
 
 describe('usage status', () => {
   it('does not trigger thresholds for unlimited zero-limit buckets', () => {
@@ -70,6 +70,66 @@ describe('usage status', () => {
     );
 
     expect(snapshot.overallPercent).toBe(82);
+    expect(snapshot.quotaSummary).toMatchObject({
+      source: 'token_plan',
+      used: 82,
+      limit: 100,
+      remaining: 18
+    });
     expect(snapshot.status).toBe('warn');
+  });
+
+  it('prefers the plan total bucket for remaining quota', () => {
+    const quota = summarizeQuota(
+      [
+        normalizeBucket({
+          name: 'month_total_token',
+          used: 20,
+          limit: 200,
+          percent: 10
+        })
+      ],
+      [
+        normalizeBucket({
+          name: 'plan_total_token',
+          used: 75,
+          limit: 300,
+          percent: 25
+        })
+      ]
+    );
+
+    expect(quota).toEqual({
+      source: 'token_plan',
+      used: 75,
+      limit: 300,
+      percent: 25,
+      remaining: 225
+    });
+  });
+
+  it('marks accounts without positive token-plan quota as API key balance usage', () => {
+    const quota = summarizeQuota(
+      [
+        normalizeBucket({
+          name: 'month_total_token',
+          used: 0,
+          limit: 0,
+          percent: 0
+        })
+      ],
+      [
+        normalizeBucket({
+          name: 'compensation_total_token',
+          used: 0,
+          limit: 0,
+          percent: 0
+        })
+      ]
+    );
+
+    expect(quota.source).toBe('api_key');
+    expect(quota.limit).toBe(0);
+    expect(quota.remaining).toBe(0);
   });
 });

@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   CircleAlert,
   CircleCheck,
-  ClipboardPaste,
-  ExternalLink,
   LogIn,
   Pencil,
   RefreshCw,
@@ -21,7 +19,6 @@ import { formatCompactNumber, formatNumber } from '../../utils/format.js';
 import { unwrap } from './api.js';
 
 type DialogMode =
-  | { type: 'paste-cookie' }
   | { type: 'edit-label'; account: Account }
   | { type: 'delete'; account: Account }
   | null;
@@ -115,24 +112,6 @@ export function App(): React.ReactElement {
     });
   }
 
-  async function openDefaultBrowserLogin(): Promise<void> {
-    await run(async () => {
-      await unwrap(await window.mimo.openExternalLogin());
-      setStatus('Opened Xiaomi login in your default browser. After login, use Paste Cookie to import it here.');
-    });
-  }
-
-  async function pasteCookie(input: { name: string; label?: string; cookieHeader: string }): Promise<void> {
-    await run(async () => {
-      const next = await unwrap(await window.mimo.addFromCookie(input));
-      setConfig(next);
-      const account = next.accounts.find((candidate) => candidate.name === input.name);
-      setSelectedId(account?.id ?? next.settings.defaultAccountId);
-      setDialog(null);
-      setStatus(`Saved ${input.name} from pasted cookie.`);
-    });
-  }
-
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -144,18 +123,6 @@ export function App(): React.ReactElement {
           <button className="button secondary" onClick={refreshAll} disabled={busy || config.accounts.length === 0}>
             <RefreshCw size={17} />
             Refresh
-          </button>
-          <button className="button secondary" onClick={() => setDialog({ type: 'paste-cookie' })} disabled={busy}>
-            <ClipboardPaste size={17} />
-            Paste Cookie
-          </button>
-          <button className="button secondary" onClick={() => void openDefaultBrowserLogin()} disabled={busy}>
-            <ExternalLink size={17} />
-            Browser Login
-          </button>
-          <button className="button primary" onClick={() => void login()} disabled={busy}>
-            <LogIn size={17} />
-            Login & Import
           </button>
         </div>
       </header>
@@ -170,7 +137,15 @@ export function App(): React.ReactElement {
       <section className="workspace">
         <aside className="account-panel">
           <div className="panel-header">
-            <h2>Accounts</h2>
+            <div className="panel-title-row">
+              <h2>Accounts</h2>
+              {config.accounts.length > 0 ? (
+                <button className="button secondary compact" onClick={() => void login()} disabled={busy}>
+                  <LogIn size={16} />
+                  Add Account
+                </button>
+              ) : null}
+            </div>
             <div className="search-box">
               <Search size={15} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, label, userId" />
@@ -185,10 +160,6 @@ export function App(): React.ReactElement {
                 <button className="button primary" onClick={() => void login()} disabled={busy}>
                   <LogIn size={17} />
                   Login & Import
-                </button>
-                <button className="button secondary" onClick={() => void openDefaultBrowserLogin()} disabled={busy}>
-                  <ExternalLink size={17} />
-                  Browser Login
                 </button>
               </div>
             ) : (
@@ -230,9 +201,6 @@ export function App(): React.ReactElement {
         <span>{status}</span>
       </footer>
 
-      {dialog?.type === 'paste-cookie' ? (
-        <PasteCookieDialog busy={busy} onCancel={() => setDialog(null)} onSubmit={pasteCookie} />
-      ) : null}
       {dialog?.type === 'edit-label' ? (
         <LabelDialog account={dialog.account} busy={busy} onCancel={() => setDialog(null)} onSubmit={saveLabel} />
       ) : null}
@@ -312,6 +280,8 @@ function AccountDetail({
   onEdit: () => void;
   onDelete: () => void;
 }): React.ReactElement {
+  const quota = snapshot?.quotaSummary;
+
   return (
     <>
       <div className="detail-header">
@@ -335,17 +305,28 @@ function AccountDetail({
 
       <div className="detail-status-row">
         <StatusPill status={snapshot?.status ?? 'unknown'} />
+        <SourcePill source={quota?.source ?? 'unknown'} />
         <span>{snapshot ? `${snapshot.overallPercent}% overall usage` : 'No usage snapshot yet'}</span>
+        <span>
+          {snapshot
+            ? quota && quota.limit > 0
+              ? `${formatCompactNumber(quota.remaining)} credits remaining`
+              : 'No token-plan limit'
+            : 'Quota unknown'}
+        </span>
         <span>{account.isDefault ? 'Default account' : 'Secondary account'}</span>
       </div>
 
       {account.lastError ? <div className="error-banner">{account.lastError}</div> : null}
 
       {snapshot ? (
-        <div className="usage-grid">
-          <UsageSection title="Month Usage" buckets={snapshot.monthUsage} />
-          <UsageSection title="Plan Usage" buckets={snapshot.planUsage} />
-        </div>
+        <>
+          <QuotaOverview snapshot={snapshot} />
+          <div className="usage-grid">
+            <UsageSection title="Month Usage" buckets={snapshot.monthUsage} />
+            <UsageSection title="Plan Usage" buckets={snapshot.planUsage} />
+          </div>
+        </>
       ) : (
         <div className="empty-detail inline">
           <CircleAlert size={28} />
@@ -354,6 +335,39 @@ function AccountDetail({
         </div>
       )}
     </>
+  );
+}
+
+function QuotaOverview({ snapshot }: { snapshot: UsageSnapshot }): React.ReactElement {
+  const quota = snapshot.quotaSummary;
+
+  return (
+    <section className="quota-overview">
+      <div className="quota-overview-main">
+        <div>
+          <div className="eyebrow">Quota Source</div>
+          <h3>{sourceLabel(quota.source)}</h3>
+        </div>
+        <strong>{quota.percent}%</strong>
+      </div>
+      <div className="progress-track">
+        <div className={`progress-fill ${statusClass(snapshot.status)}`} style={{ width: `${Math.min(quota.percent, 100)}%` }} />
+      </div>
+      <div className="quota-metrics">
+        <QuotaMetric label="Used" value={formatNumber(quota.used)} />
+        <QuotaMetric label="Limit" value={quota.limit > 0 ? formatNumber(quota.limit) : 'No token-plan limit'} />
+        <QuotaMetric label="Remaining" value={quota.limit > 0 ? formatNumber(quota.remaining) : '-'} />
+      </div>
+    </section>
+  );
+}
+
+function QuotaMetric({ label, value }: { label: string; value: string }): React.ReactElement {
+  return (
+    <div className="quota-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
@@ -383,45 +397,6 @@ function UsageSection({ title, buckets }: { title: string; buckets: TokenBucket[
         ))
       )}
     </section>
-  );
-}
-
-function PasteCookieDialog({
-  busy,
-  onCancel,
-  onSubmit
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onSubmit: (input: { name: string; label?: string; cookieHeader: string }) => Promise<void>;
-}): React.ReactElement {
-  const [name, setName] = useState('');
-  const [label, setLabel] = useState('');
-  const [cookieHeader, setCookieHeader] = useState('');
-
-  return (
-    <Dialog title="Paste Cookie" onCancel={onCancel}>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void onSubmit({ name, label, cookieHeader });
-        }}
-      >
-        <label>
-          Account name
-          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="main" />
-        </label>
-        <label>
-          Label
-          <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Optional display label" />
-        </label>
-        <label>
-          Cookie header
-          <textarea value={cookieHeader} onChange={(event) => setCookieHeader(event.target.value)} rows={5} />
-        </label>
-        <DialogActions busy={busy} onCancel={onCancel} submitLabel="Save Cookie" submitDisabled={!name.trim() || !cookieHeader.trim()} />
-      </form>
-    </Dialog>
   );
 }
 
@@ -540,6 +515,23 @@ function StatusPill({ status }: { status: UsageStatus | 'unknown' }): React.Reac
       {status}
     </span>
   );
+}
+
+function SourcePill({ source }: { source: UsageSnapshot['quotaSummary']['source'] | 'unknown' }): React.ReactElement {
+  return <span className={`source-pill ${source.replace(/_/g, '-')}`}>{sourceLabel(source)}</span>;
+}
+
+function sourceLabel(source: UsageSnapshot['quotaSummary']['source'] | 'unknown'): string {
+  switch (source) {
+    case 'token_plan':
+      return 'Token Plan';
+    case 'api_key':
+      return 'API Key / Balance';
+    case 'mixed':
+      return 'Mixed quota';
+    default:
+      return 'Unknown source';
+  }
 }
 
 function filterAccounts(accounts: Account[], query: string): Account[] {

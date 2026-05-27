@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cookieHeaderFromBrowserCookies,
+  cookieValuesFromBrowserCookies,
   parseCookieHeader,
   redactCookieHeader,
   validateMimoCookieHeader
@@ -35,6 +36,15 @@ describe('cookie utilities', () => {
     ]);
 
     expect(result.cookieHeader).toContain('api-platform_ph=ph');
+  });
+
+  it('extracts browser cookie values for request-header merging', () => {
+    const result = cookieValuesFromBrowserCookies([
+      { name: 'api-platform_serviceToken', value: 'token' },
+      { name: 'empty', value: '' }
+    ]);
+
+    expect(result).toEqual({ 'api-platform_serviceToken': 'token' });
   });
 
   it('redacts secrets without removing cookie names', () => {

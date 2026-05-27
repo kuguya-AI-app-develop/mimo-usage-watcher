@@ -57,13 +57,18 @@ export function validateMimoCookieValues(values: Record<string, string>): MimoCo
   };
 }
 
-export function cookieHeaderFromBrowserCookies(cookies: BrowserCookie[]): MimoCookieSet {
+export function cookieValuesFromBrowserCookies(cookies: BrowserCookie[]): Record<string, string> {
   const values: Record<string, string> = {};
   for (const cookie of cookies) {
     if (cookie.name && cookie.value) {
       values[cookie.name] = cookie.value;
     }
   }
+  return values;
+}
+
+export function cookieHeaderFromBrowserCookies(cookies: BrowserCookie[]): MimoCookieSet {
+  const values = cookieValuesFromBrowserCookies(cookies);
   return validateMimoCookieValues(values);
 }
 

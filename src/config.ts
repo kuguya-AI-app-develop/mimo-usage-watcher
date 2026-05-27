@@ -9,6 +9,7 @@ import {
   DEFAULT_WARN_PERCENT
 } from './constants.js';
 import type { Account, AppConfig, Settings, UsageSnapshot } from './types.js';
+import { summarizeQuota } from './utils/status.js';
 
 const AccountSchema = z.object({
   id: z.string(),
@@ -31,14 +32,28 @@ const TokenBucketSchema = z.object({
   remaining: z.number()
 });
 
-const UsageSnapshotSchema = z.object({
-  accountId: z.string(),
-  fetchedAt: z.string(),
-  monthUsage: z.array(TokenBucketSchema),
-  planUsage: z.array(TokenBucketSchema),
-  overallPercent: z.number(),
-  status: z.enum(['ok', 'warn', 'critical', 'stale', 'login required', 'unknown'])
+const QuotaSummarySchema = z.object({
+  source: z.enum(['token_plan', 'api_key', 'mixed', 'unknown']),
+  used: z.number(),
+  limit: z.number(),
+  percent: z.number(),
+  remaining: z.number()
 });
+
+const UsageSnapshotSchema = z
+  .object({
+    accountId: z.string(),
+    fetchedAt: z.string(),
+    monthUsage: z.array(TokenBucketSchema),
+    planUsage: z.array(TokenBucketSchema),
+    quotaSummary: QuotaSummarySchema.optional(),
+    overallPercent: z.number(),
+    status: z.enum(['ok', 'warn', 'critical', 'stale', 'login required', 'unknown'])
+  })
+  .transform((snapshot) => ({
+    ...snapshot,
+    quotaSummary: snapshot.quotaSummary ?? summarizeQuota(snapshot.monthUsage, snapshot.planUsage)
+  }));
 
 const SettingsSchema = z.object({
   refreshIntervalSeconds: z.number().int().positive().default(DEFAULT_REFRESH_INTERVAL_SECONDS),

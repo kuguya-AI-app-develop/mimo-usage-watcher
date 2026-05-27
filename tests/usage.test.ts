@@ -32,6 +32,12 @@ describe('fetchUsageSnapshot', () => {
     expect(snapshot.accountId).toBe('main');
     expect(snapshot.monthUsage[0]?.remaining).toBe(90);
     expect(snapshot.planUsage[0]?.name).toBe('plan_total_token');
+    expect(snapshot.quotaSummary).toMatchObject({
+      source: 'token_plan',
+      used: 20,
+      limit: 100,
+      remaining: 80
+    });
     expect(snapshot.status).toBe('ok');
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('/tokenPlan/usage'), expect.any(Object));
   });

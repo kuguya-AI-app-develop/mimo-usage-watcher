@@ -80,6 +80,9 @@ export function renderAccountDetails(account: Account, snapshot?: UsageSnapshot)
   }
 
   lines.push(`  Status: ${statusLabel(snapshot.status)} (${snapshot.overallPercent}%)`);
+  lines.push(
+    `  Quota source: ${snapshot.quotaSummary.source} | remaining: ${snapshot.quotaSummary.remaining}`
+  );
   lines.push('  Month usage:');
   if (snapshot.monthUsage.length === 0) {
     lines.push('    -');

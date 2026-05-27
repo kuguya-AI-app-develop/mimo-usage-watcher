@@ -5,6 +5,7 @@ import type { CredentialStore } from './keychain.js';
 import { KeychainCredentialStore } from './keychain.js';
 import { fetchUsageSnapshot, MimoUsageError } from './usage.js';
 import { validateManualCookie, waitForBrowserLogin } from './login.js';
+import { summarizeQuota } from './utils/status.js';
 
 export interface AccountServiceOptions {
   configStore?: ConfigStore;
@@ -210,6 +211,7 @@ export class AccountService {
           fetchedAt: now,
           monthUsage: [],
           planUsage: [],
+          quotaSummary: summarizeQuota([], []),
           overallPercent: 0,
           status
         };

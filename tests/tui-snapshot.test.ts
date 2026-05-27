@@ -24,6 +24,13 @@ describe('TUI snapshot rendering', () => {
       accountId: 'main',
       fetchedAt: '2026-05-27T00:00:01.000Z',
       overallPercent: 90,
+      quotaSummary: {
+        source: 'token_plan',
+        used: 90,
+        limit: 100,
+        percent: 90,
+        remaining: 10
+      },
       status: 'warn',
       monthUsage: [{ name: 'month_total_token', used: 90, limit: 100, percent: 90, remaining: 10 }],
       planUsage: []

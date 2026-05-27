@@ -1,4 +1,4 @@
-import type { Settings, TokenBucket, UsageSnapshot, UsageStatus } from '../types.js';
+import type { QuotaSummary, Settings, TokenBucket, UsageSnapshot, UsageStatus } from '../types.js';
 
 export function bucketRemaining(bucket: { used: number; limit: number }): number {
   if (bucket.limit <= 0) {
@@ -44,15 +44,78 @@ export function calculateUsageStatus(
   return 'ok';
 }
 
+export function summarizeQuota(monthUsage: TokenBucket[], planUsage: TokenBucket[]): QuotaSummary {
+  const buckets = [...monthUsage, ...planUsage];
+  const limitedBuckets = buckets.filter((bucket) => bucket.limit > 0);
+  const tokenPlanBuckets = limitedBuckets.filter(isTokenPlanBucket);
+  const otherLimitedBuckets = limitedBuckets.filter((bucket) => !isTokenPlanBucket(bucket));
+  const primaryBucket = selectPrimaryQuotaBucket(tokenPlanBuckets, otherLimitedBuckets, buckets);
+
+  return {
+    source: quotaSource(tokenPlanBuckets, otherLimitedBuckets, buckets),
+    used: primaryBucket?.used ?? 0,
+    limit: primaryBucket?.limit ?? 0,
+    percent: primaryBucket?.percent ?? 0,
+    remaining: primaryBucket?.remaining ?? 0
+  };
+}
+
 export function snapshotWithStatus(
-  snapshot: Omit<UsageSnapshot, 'overallPercent' | 'status'>,
+  snapshot: Omit<UsageSnapshot, 'overallPercent' | 'quotaSummary' | 'status'>,
   settings: Pick<Settings, 'warnPercent' | 'criticalPercent'>
 ): UsageSnapshot {
   const buckets = [...snapshot.monthUsage, ...snapshot.planUsage];
   const overallPercent = calculateOverallPercent(buckets);
   return {
     ...snapshot,
+    quotaSummary: summarizeQuota(snapshot.monthUsage, snapshot.planUsage),
     overallPercent,
     status: calculateUsageStatus(buckets, settings)
   };
+}
+
+function quotaSource(
+  tokenPlanBuckets: TokenBucket[],
+  otherLimitedBuckets: TokenBucket[],
+  allBuckets: TokenBucket[]
+): QuotaSummary['source'] {
+  if (tokenPlanBuckets.length > 0 && otherLimitedBuckets.length > 0) {
+    return 'mixed';
+  }
+  if (tokenPlanBuckets.length > 0) {
+    return 'token_plan';
+  }
+  if (allBuckets.length > 0) {
+    return 'api_key';
+  }
+  return 'unknown';
+}
+
+function selectPrimaryQuotaBucket(
+  tokenPlanBuckets: TokenBucket[],
+  otherLimitedBuckets: TokenBucket[],
+  allBuckets: TokenBucket[]
+): TokenBucket | undefined {
+  return (
+    tokenPlanBuckets.find((bucket) => bucket.name === 'plan_total_token') ??
+    tokenPlanBuckets.find((bucket) => bucket.name === 'month_total_token') ??
+    highestPercentBucket(tokenPlanBuckets) ??
+    highestPercentBucket(otherLimitedBuckets) ??
+    allBuckets.find((bucket) => bucket.name === 'plan_total_token') ??
+    allBuckets.find((bucket) => bucket.name === 'month_total_token') ??
+    highestPercentBucket(allBuckets)
+  );
+}
+
+function highestPercentBucket(buckets: TokenBucket[]): TokenBucket | undefined {
+  return buckets.reduce<TokenBucket | undefined>((selected, bucket) => {
+    if (!selected || bucket.percent > selected.percent) {
+      return bucket;
+    }
+    return selected;
+  }, undefined);
+}
+
+function isTokenPlanBucket(bucket: TokenBucket): boolean {
+  return bucket.name === 'plan_total_token' || bucket.name === 'month_total_token';
 }
