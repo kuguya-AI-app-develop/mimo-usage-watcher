@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { BrowserWindow, clipboard, ipcMain, shell } from 'electron';
 import { AccountService, createAccountId } from '../accounts.js';
 import { ConfigStore } from '../config.js';
 import { LOGIN_ENTRY_URL } from '../constants.js';
@@ -31,6 +31,19 @@ export function registerIpcHandlers(service: AccountService, getMainWindow: () =
     wrap(() => service.renameLabel(accountId, label))
   );
   ipcMain.handle('account:remove', async (_event, accountId: string) => wrap(() => service.remove(accountId)));
+  ipcMain.handle('apiKey:add', async (_event, input: { accountId: string; label?: string; apiKey: string }) =>
+    wrap(() => service.addApiKey(input))
+  );
+  ipcMain.handle('apiKey:copy', async (_event, accountId: string, apiKeyId: string) =>
+    wrap(async () => {
+      const result = await service.copyApiKey(accountId, apiKeyId);
+      clipboard.writeText(result.apiKey);
+      return result.config;
+    })
+  );
+  ipcMain.handle('apiKey:remove', async (_event, accountId: string, apiKeyId: string) =>
+    wrap(() => service.removeApiKey(accountId, apiKeyId))
+  );
   ipcMain.handle('account:addFromCookie', async (_event, input: { name: string; label?: string; cookieHeader: string }) =>
     wrap(() =>
       service.addOrUpdateFromCookie({

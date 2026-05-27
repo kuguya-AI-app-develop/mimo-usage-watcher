@@ -192,6 +192,18 @@ button:disabled {
   gap: 12px;
 }
 
+.section-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.section-title-row h3 {
+  margin: 4px 0 0;
+}
+
 .button.compact {
   min-height: 34px;
   padding: 0 11px;
@@ -478,6 +490,62 @@ button:disabled {
   margin: 0 0 12px;
 }
 
+.api-keys-section {
+  border: 1px solid #e5e9ef;
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.api-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.api-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #eef2f6;
+  border-radius: 8px;
+  padding: 11px;
+  background: #fbfcfd;
+}
+
+.api-key-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.api-key-main strong,
+.api-key-main code,
+.api-key-main span {
+  display: block;
+}
+
+.api-key-main code {
+  color: #344054;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.api-key-main span {
+  color: #667085;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.api-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .bucket-row + .bucket-row {
   margin-top: 14px;
   padding-top: 14px;
@@ -628,6 +696,11 @@ button:disabled {
   .topbar-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .api-key-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .summary-grid,

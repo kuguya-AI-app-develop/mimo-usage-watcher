@@ -2,14 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CircleAlert,
   CircleCheck,
+  Copy,
+  KeyRound,
   LogIn,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   Star,
   Trash2
 } from 'lucide-react';
-import type { Account, AppConfig, TokenBucket, UsageSnapshot, UsageStatus } from '../../types.js';
+import type { Account, ApiKeyRef, AppConfig, TokenBucket, UsageSnapshot, UsageStatus } from '../../types.js';
 import {
   DEFAULT_CRITICAL_PERCENT,
   DEFAULT_REFRESH_INTERVAL_SECONDS,
@@ -21,6 +24,8 @@ import { unwrap } from './api.js';
 type DialogMode =
   | { type: 'edit-label'; account: Account }
   | { type: 'delete'; account: Account }
+  | { type: 'add-api-key'; account: Account }
+  | { type: 'delete-api-key'; account: Account; apiKey: ApiKeyRef }
   | null;
 
 export function App(): React.ReactElement {
@@ -35,6 +40,7 @@ export function App(): React.ReactElement {
   const accounts = useMemo(() => filterAccounts(config.accounts, query), [config.accounts, query]);
   const selected = accounts.find((account) => account.id === selectedId) ?? accounts[0];
   const selectedSnapshot = selected ? config.snapshots[selected.id] : undefined;
+  const selectedApiKeys = selected ? config.apiKeys.filter((apiKey) => apiKey.accountId === selected.id) : [];
   const summary = useMemo(() => summarize(config), [config]);
 
   useEffect(() => {
@@ -133,6 +139,32 @@ export function App(): React.ReactElement {
     });
   }
 
+  async function addApiKey(account: Account, label: string, apiKey: string): Promise<void> {
+    await run(async () => {
+      const next = await unwrap(await window.mimo.addApiKey({ accountId: account.id, label, apiKey }));
+      setConfig(next);
+      setDialog(null);
+      setStatus('API key was saved locally.');
+    });
+  }
+
+  async function copyApiKey(account: Account, apiKey: ApiKeyRef): Promise<void> {
+    await run(async () => {
+      const next = await unwrap(await window.mimo.copyApiKey(account.id, apiKey.id));
+      setConfig(next);
+      setStatus(`${apiKey.label || 'API key'} copied to clipboard.`);
+    });
+  }
+
+  async function deleteApiKey(account: Account, apiKey: ApiKeyRef): Promise<void> {
+    await run(async () => {
+      const next = await unwrap(await window.mimo.removeApiKey(account.id, apiKey.id));
+      setConfig(next);
+      setDialog(null);
+      setStatus(`${apiKey.label || 'API key'} was removed.`);
+    });
+  }
+
   async function login(input: { name?: string; label?: string } = {}): Promise<void> {
     await run(async () => {
       setStatus('Opening Xiaomi login window...');
@@ -217,10 +249,14 @@ export function App(): React.ReactElement {
             <AccountDetail
               account={selected}
               snapshot={selectedSnapshot}
+              apiKeys={selectedApiKeys}
               busy={busy}
               onSetDefault={() => void setDefault(selected)}
               onEdit={() => setDialog({ type: 'edit-label', account: selected })}
               onDelete={() => setDialog({ type: 'delete', account: selected })}
+              onAddApiKey={() => setDialog({ type: 'add-api-key', account: selected })}
+              onCopyApiKey={(apiKey) => void copyApiKey(selected, apiKey)}
+              onDeleteApiKey={(apiKey) => setDialog({ type: 'delete-api-key', account: selected, apiKey })}
             />
           ) : (
             <div className="empty-detail">
@@ -242,6 +278,18 @@ export function App(): React.ReactElement {
       ) : null}
       {dialog?.type === 'delete' ? (
         <ConfirmDeleteDialog account={dialog.account} busy={busy} onCancel={() => setDialog(null)} onConfirm={deleteAccount} />
+      ) : null}
+      {dialog?.type === 'add-api-key' ? (
+        <ApiKeyDialog account={dialog.account} busy={busy} onCancel={() => setDialog(null)} onSubmit={addApiKey} />
+      ) : null}
+      {dialog?.type === 'delete-api-key' ? (
+        <ConfirmDeleteApiKeyDialog
+          account={dialog.account}
+          apiKey={dialog.apiKey}
+          busy={busy}
+          onCancel={() => setDialog(null)}
+          onConfirm={deleteApiKey}
+        />
       ) : null}
     </main>
   );
@@ -304,17 +352,25 @@ function AccountRow({
 function AccountDetail({
   account,
   snapshot,
+  apiKeys,
   busy,
   onSetDefault,
   onEdit,
-  onDelete
+  onDelete,
+  onAddApiKey,
+  onCopyApiKey,
+  onDeleteApiKey
 }: {
   account: Account;
   snapshot?: UsageSnapshot;
+  apiKeys: ApiKeyRef[];
   busy: boolean;
   onSetDefault: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onAddApiKey: () => void;
+  onCopyApiKey: (apiKey: ApiKeyRef) => void;
+  onDeleteApiKey: (apiKey: ApiKeyRef) => void;
 }): React.ReactElement {
   const tokenPlanLabel = snapshot ? resolveTokenPlanLabel(snapshot) : undefined;
   const hasApiBalance = snapshot?.balance ? balanceAvailable(snapshot.balance) > 0 : false;
@@ -367,6 +423,13 @@ function AccountDetail({
           <p>Refresh this account after login to fetch token plan usage and API key balance data.</p>
         </div>
       )}
+      <ApiKeysSection
+        apiKeys={apiKeys}
+        busy={busy}
+        onAdd={onAddApiKey}
+        onCopy={onCopyApiKey}
+        onDelete={onDeleteApiKey}
+      />
     </>
   );
 }
@@ -393,6 +456,62 @@ function BalanceOverview({ balance }: { balance: NonNullable<UsageSnapshot['bala
           value={`${formatMoney(balance.remainingOverdraftLimit, balance.currency)} / ${formatMoney(balance.overdraftLimit, balance.currency)}`}
         />
       </div>
+    </section>
+  );
+}
+
+function ApiKeysSection({
+  apiKeys,
+  busy,
+  onAdd,
+  onCopy,
+  onDelete
+}: {
+  apiKeys: ApiKeyRef[];
+  busy: boolean;
+  onAdd: () => void;
+  onCopy: (apiKey: ApiKeyRef) => void;
+  onDelete: (apiKey: ApiKeyRef) => void;
+}): React.ReactElement {
+  return (
+    <section className="api-keys-section">
+      <div className="section-title-row">
+        <div>
+          <div className="eyebrow">Local API Keys</div>
+          <h3>API Keys</h3>
+        </div>
+        <button className="button secondary compact" onClick={onAdd} disabled={busy}>
+          <Plus size={16} />
+          Add Key
+        </button>
+      </div>
+      {apiKeys.length === 0 ? (
+        <p className="muted">No API keys saved locally.</p>
+      ) : (
+        <div className="api-key-list">
+          {apiKeys.map((apiKey) => (
+            <div className="api-key-row" key={apiKey.id}>
+              <div className="api-key-main">
+                <KeyRound size={18} />
+                <div>
+                  <strong>{apiKey.label || 'API Key'}</strong>
+                  <code>{apiKey.maskedKey}</code>
+                  <span>{apiKey.lastCopiedAt ? `Last copied ${shortTime(apiKey.lastCopiedAt)}` : 'Not copied yet'}</span>
+                </div>
+              </div>
+              <div className="api-key-actions">
+                <button className="button secondary compact" onClick={() => onCopy(apiKey)} disabled={busy}>
+                  <Copy size={15} />
+                  Copy
+                </button>
+                <button className="icon-button danger" title="Delete API key" onClick={() => onDelete(apiKey)} disabled={busy}>
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -474,6 +593,50 @@ function LabelDialog({
   );
 }
 
+function ApiKeyDialog({
+  account,
+  busy,
+  onCancel,
+  onSubmit
+}: {
+  account: Account;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (account: Account, label: string, apiKey: string) => Promise<void>;
+}): React.ReactElement {
+  const [label, setLabel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+
+  return (
+    <Dialog title="Add API Key" onCancel={onCancel}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSubmit(account, label, apiKey);
+        }}
+      >
+        <label>
+          Label
+          <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Optional" />
+        </label>
+        <label>
+          API Key
+          <input
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder="mimo_sk_..."
+          />
+        </label>
+        <DialogActions busy={busy} onCancel={onCancel} submitLabel="Save API Key" submitDisabled={!apiKey.trim()} />
+      </form>
+    </Dialog>
+  );
+}
+
 function ConfirmDeleteDialog({
   account,
   busy,
@@ -495,6 +658,37 @@ function ConfirmDeleteDialog({
           Cancel
         </button>
         <button className="button danger" onClick={() => void onConfirm(account)} disabled={busy}>
+          <Trash2 size={17} />
+          Delete
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+function ConfirmDeleteApiKeyDialog({
+  account,
+  apiKey,
+  busy,
+  onCancel,
+  onConfirm
+}: {
+  account: Account;
+  apiKey: ApiKeyRef;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (account: Account, apiKey: ApiKeyRef) => Promise<void>;
+}): React.ReactElement {
+  return (
+    <Dialog title="Delete API Key" onCancel={onCancel}>
+      <p>
+        Delete <strong>{apiKey.label || apiKey.maskedKey}</strong> from local metadata and remove the secret from Keychain?
+      </p>
+      <div className="dialog-actions">
+        <button className="button secondary" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button className="button danger" onClick={() => void onConfirm(account, apiKey)} disabled={busy}>
           <Trash2 size={17} />
           Delete
         </button>
@@ -721,6 +915,7 @@ function createEmptyRendererConfig(): AppConfig {
   return {
     version: 1,
     accounts: [],
+    apiKeys: [],
     settings: {
       refreshIntervalSeconds: DEFAULT_REFRESH_INTERVAL_SECONDS,
       warnPercent: DEFAULT_WARN_PERCENT,

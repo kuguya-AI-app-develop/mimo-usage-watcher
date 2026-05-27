@@ -21,6 +21,9 @@ export interface MimoGuiApi {
   setDefault(accountId: string): Promise<GuiApiResponse<AppConfig>>;
   renameLabel(accountId: string, label: string): Promise<GuiApiResponse<AppConfig>>;
   remove(accountId: string): Promise<GuiApiResponse<AppConfig>>;
+  addApiKey(input: { accountId: string; label?: string; apiKey: string }): Promise<GuiApiResponse<AppConfig>>;
+  copyApiKey(accountId: string, apiKeyId: string): Promise<GuiApiResponse<AppConfig>>;
+  removeApiKey(accountId: string, apiKeyId: string): Promise<GuiApiResponse<AppConfig>>;
 }
 
 export async function unwrap<T>(response: GuiApiResponse<T>): Promise<T> {

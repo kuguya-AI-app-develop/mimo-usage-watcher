@@ -18,6 +18,7 @@ describe('ConfigStore', () => {
     const config = await store.load();
 
     expect(config.accounts).toEqual([]);
+    expect(config.apiKeys).toEqual([]);
     expect(config.settings.refreshIntervalSeconds).toBe(60);
   });
 

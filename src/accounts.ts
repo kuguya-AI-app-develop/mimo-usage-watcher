@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Account, AppConfig, UsageSnapshot, UsageStatus } from './types.js';
+import type { Account, ApiKeyRef, AppConfig, UsageSnapshot, UsageStatus } from './types.js';
 import { ConfigStore, upsertAccount } from './config.js';
 import type { CredentialStore } from './keychain.js';
 import { KeychainCredentialStore } from './keychain.js';
 import { fetchUsageSnapshot, MimoUsageError } from './usage.js';
 import { validateManualCookie, waitForBrowserLogin } from './login.js';
+import { maskApiKey, normalizeApiKey } from './utils/api-keys.js';
 import { summarizeQuota } from './utils/status.js';
 
 export interface AccountServiceOptions {
@@ -20,6 +21,12 @@ export interface AddAccountInput {
   validateUsage?: boolean;
   accountId?: string;
   profileDir?: string;
+}
+
+export interface AddApiKeyInput {
+  accountId: string;
+  label?: string;
+  apiKey: string;
 }
 
 export class AccountService {
@@ -154,10 +161,72 @@ export class AccountService {
     return this.configStore.save({ ...config, accounts });
   }
 
+  async addApiKey(input: AddApiKeyInput): Promise<AppConfig> {
+    const config = await this.configStore.load();
+    assertAccountExists(config, input.accountId);
+    const apiKey = normalizeApiKey(input.apiKey);
+    if (!apiKey) {
+      throw new Error('API key is required.');
+    }
+
+    const now = new Date().toISOString();
+    const apiKeyRef: ApiKeyRef = {
+      id: randomUUID(),
+      accountId: input.accountId,
+      label: input.label?.trim() || undefined,
+      maskedKey: maskApiKey(apiKey),
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await this.credentialStore.setApiKey(apiKeyRef.id, apiKey);
+    return this.configStore.save({
+      ...config,
+      apiKeys: [...config.apiKeys, apiKeyRef]
+    });
+  }
+
+  async copyApiKey(accountId: string, apiKeyId: string): Promise<{ apiKey: string; config: AppConfig }> {
+    const config = await this.configStore.load();
+    const apiKeyRef = findApiKey(config, accountId, apiKeyId);
+    const apiKey = await this.credentialStore.getApiKey(apiKeyRef.id);
+    if (!apiKey) {
+      throw new Error('API key secret was not found in Keychain.');
+    }
+
+    const now = new Date().toISOString();
+    const next = await this.configStore.save({
+      ...config,
+      apiKeys: config.apiKeys.map((candidate) =>
+        candidate.id === apiKeyId && candidate.accountId === accountId
+          ? { ...candidate, lastCopiedAt: now, updatedAt: now }
+          : candidate
+      )
+    });
+
+    return { apiKey, config: next };
+  }
+
+  async removeApiKey(accountId: string, apiKeyId: string): Promise<AppConfig> {
+    const config = await this.configStore.load();
+    const apiKeyRef = findApiKey(config, accountId, apiKeyId);
+    await this.credentialStore.deleteApiKey(apiKeyRef.id);
+    return this.configStore.save({
+      ...config,
+      apiKeys: config.apiKeys.filter((candidate) => !(candidate.accountId === accountId && candidate.id === apiKeyId))
+    });
+  }
+
   async remove(accountId: string): Promise<AppConfig> {
     const config = await this.configStore.load();
     await this.credentialStore.deleteCookie(accountId);
+    await Promise.all(
+      config.apiKeys
+        .filter((apiKey) => apiKey.accountId === accountId)
+        .map((apiKey) => this.credentialStore.deleteApiKey(apiKey.id))
+    );
     const accounts = config.accounts.filter((account) => account.id !== accountId);
+    const apiKeys = config.apiKeys.filter((apiKey) => apiKey.accountId !== accountId);
     const snapshots = { ...config.snapshots };
     delete snapshots[accountId];
     const defaultAccountId =
@@ -165,6 +234,7 @@ export class AccountService {
     return this.configStore.save({
       ...config,
       accounts,
+      apiKeys,
       snapshots,
       settings: {
         ...config.settings,
@@ -249,4 +319,19 @@ function usageStatusForError(error: unknown): Extract<UsageStatus, 'stale' | 'lo
     return 'login required';
   }
   return 'stale';
+}
+
+function assertAccountExists(config: AppConfig, accountId: string): void {
+  if (!config.accounts.some((account) => account.id === accountId)) {
+    throw new Error(`Unknown account: ${accountId}`);
+  }
+}
+
+function findApiKey(config: AppConfig, accountId: string, apiKeyId: string): ApiKeyRef {
+  assertAccountExists(config, accountId);
+  const apiKey = config.apiKeys.find((candidate) => candidate.accountId === accountId && candidate.id === apiKeyId);
+  if (!apiKey) {
+    throw new Error(`Unknown API key: ${apiKeyId}`);
+  }
+  return apiKey;
 }

@@ -24,6 +24,16 @@ const AccountSchema = z.object({
   lastError: z.string().optional()
 });
 
+const ApiKeyRefSchema = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  label: z.string().optional(),
+  maskedKey: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastCopiedAt: z.string().optional()
+});
+
 const TokenBucketSchema = z.object({
   name: z.string(),
   used: z.number(),
@@ -86,6 +96,7 @@ const SettingsSchema = z.object({
 const ConfigSchema = z.object({
   version: z.literal(1).default(1),
   accounts: z.array(AccountSchema).default([]),
+  apiKeys: z.array(ApiKeyRefSchema).default([]),
   settings: SettingsSchema.default(createDefaultSettings),
   snapshots: z.record(z.string(), UsageSnapshotSchema).default({})
 });
@@ -136,6 +147,7 @@ export function createEmptyConfig(): AppConfig {
   return {
     version: 1,
     accounts: [],
+    apiKeys: [],
     settings: createDefaultSettings(),
     snapshots: {}
   };
@@ -171,6 +183,8 @@ export function normalizeConfig(config: AppConfig, dataDir = getDefaultDataDir()
     profileDir: account.profileDir || join(dataDir, 'profiles', account.id),
     isDefault: account.id === settings.defaultAccountId
   }));
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const apiKeys = (config.apiKeys || []).filter((apiKey) => accountIds.has(apiKey.accountId));
 
   const snapshots: Record<string, UsageSnapshot> = {};
   for (const [accountId, snapshot] of Object.entries(config.snapshots || {})) {
@@ -182,6 +196,7 @@ export function normalizeConfig(config: AppConfig, dataDir = getDefaultDataDir()
   return {
     version: 1,
     accounts,
+    apiKeys,
     settings,
     snapshots
   };

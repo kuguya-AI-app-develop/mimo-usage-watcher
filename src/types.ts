@@ -19,6 +19,16 @@ export interface Account {
   lastError?: string;
 }
 
+export interface ApiKeyRef {
+  id: string;
+  accountId: string;
+  label?: string;
+  maskedKey: string;
+  createdAt: string;
+  updatedAt: string;
+  lastCopiedAt?: string;
+}
+
 export interface TokenBucket {
   name: string;
   used: number;
@@ -78,6 +88,7 @@ export interface Settings {
 export interface AppConfig {
   version: 1;
   accounts: Account[];
+  apiKeys: ApiKeyRef[];
   settings: Settings;
   snapshots: Record<string, UsageSnapshot>;
 }

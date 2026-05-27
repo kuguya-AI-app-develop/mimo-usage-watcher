@@ -20,14 +20,15 @@ auto-names the account from `userId`, and stores the account metadata locally.
 
 ## Storage
 
-- Sensitive cookie headers are stored in macOS Keychain under the
+- Sensitive cookie headers and manually saved API keys are stored in macOS Keychain under the
   `xiaomi-mimo-watcher` service.
 - Non-sensitive metadata and usage snapshots are stored in
   `~/.mimo-watcher/config.json`.
 - Electron browser login state is stored under `~/.mimo-watcher/electron`.
 
 The app does not read Chrome or Safari profiles and does not store Xiaomi
-account passwords.
+account passwords. Full API keys are never written to `config.json`; only their
+labels and masked values are saved there.
 
 ## Commands
 
@@ -35,6 +36,7 @@ account passwords.
 pnpm dev          # Electron GUI
 pnpm build        # TypeScript + renderer production build
 pnpm start        # Run the built Electron GUI
+pnpm dist:mac     # Build an unsigned macOS DMG under release/
 pnpm test
 pnpm typecheck
 pnpm dev:tui      # Legacy terminal UI
@@ -49,3 +51,9 @@ shows token-plan usage from `/api/v1/tokenPlan/usage` and API key account
 balance from `/api/v1/balance` side by side, because the two quota mechanisms
 can both be available on the same account. Empty zero-limit compensation buckets
 are hidden, while non-zero compensation credits are labeled separately.
+
+## Releases
+
+Pushing to `main` runs `.github/workflows/release-dmg.yml`, builds a macOS DMG,
+and attaches it to a GitHub release named from the package version and workflow
+run number.

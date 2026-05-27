@@ -1,0 +1,44 @@
+name: Release DMG
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build DMG
+        run: pnpm dist:mac
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}-${RUN_NUMBER}.${RUN_ATTEMPT}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          gh release create "$TAG" release/*.dmg \
+            --target "$GITHUB_SHA" \
+            --title "MiMo Usage Watcher ${TAG}" \
+            --notes "Automated macOS DMG build from main (${SHORT_SHA})."
