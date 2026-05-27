@@ -14,8 +14,9 @@ for refreshing all saved accounts. Login & Import is available from the account
 panel; it opens MiMo's console balance entry in a separate Electron login
 window, which redirects to the Xiaomi Account login page for `sid=api-platform`.
 After login succeeds, the app captures MiMo platform cookies from the Electron
-session and platform request headers, validates them against the usage API,
-auto-names the account from `userId`, and stores the account metadata locally.
+session and platform request headers, validates them against the usage and
+balance APIs, auto-names the account from `userId`, and stores the account
+metadata locally.
 
 ## Storage
 
@@ -39,6 +40,8 @@ pnpm typecheck
 pnpm dev:tui      # Legacy terminal UI
 ```
 
-The dashboard shows token-plan usage, quota source, remaining credits, and
-warning/critical status for each saved account. Accounts without a positive
-Token Plan quota are labeled as API Key / Balance usage.
+The dashboard refreshes saved accounts automatically every
+`refreshIntervalSeconds` seconds, in addition to the manual Refresh button. It
+shows token-plan usage from `/api/v1/tokenPlan/usage`, API key account balance
+from `/api/v1/balance`, quota source, remaining credits or balance, and
+warning/critical status for each saved account.

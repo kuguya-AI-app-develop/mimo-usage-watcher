@@ -440,6 +440,10 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.quota-overview-main + .quota-metrics {
+  margin-top: 12px;
+}
+
 .quota-metric {
   min-width: 160px;
 }

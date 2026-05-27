@@ -1,4 +1,4 @@
-import type { QuotaSummary, Settings, TokenBucket, UsageSnapshot, UsageStatus } from '../types.js';
+import type { BalanceSnapshot, QuotaSummary, Settings, TokenBucket, UsageSnapshot, UsageStatus } from '../types.js';
 
 export function bucketRemaining(bucket: { used: number; limit: number }): number {
   if (bucket.limit <= 0) {
@@ -44,15 +44,25 @@ export function calculateUsageStatus(
   return 'ok';
 }
 
-export function summarizeQuota(monthUsage: TokenBucket[], planUsage: TokenBucket[]): QuotaSummary {
+export function summarizeQuota(monthUsage: TokenBucket[], planUsage: TokenBucket[], balance?: BalanceSnapshot): QuotaSummary {
   const buckets = [...monthUsage, ...planUsage];
   const limitedBuckets = buckets.filter((bucket) => bucket.limit > 0);
   const tokenPlanBuckets = limitedBuckets.filter(isTokenPlanBucket);
   const otherLimitedBuckets = limitedBuckets.filter((bucket) => !isTokenPlanBucket(bucket));
-  const primaryBucket = selectPrimaryQuotaBucket(tokenPlanBuckets, otherLimitedBuckets, buckets);
+  const primaryBucket = selectPrimaryQuotaBucket(tokenPlanBuckets, otherLimitedBuckets);
+
+  if (!primaryBucket && balance) {
+    return {
+      source: 'api_key',
+      used: 0,
+      limit: 0,
+      percent: 0,
+      remaining: balanceAvailable(balance)
+    };
+  }
 
   return {
-    source: quotaSource(tokenPlanBuckets, otherLimitedBuckets, buckets),
+    source: quotaSource(tokenPlanBuckets, otherLimitedBuckets, buckets, balance),
     used: primaryBucket?.used ?? 0,
     limit: primaryBucket?.limit ?? 0,
     percent: primaryBucket?.percent ?? 0,
@@ -68,7 +78,7 @@ export function snapshotWithStatus(
   const overallPercent = calculateOverallPercent(buckets);
   return {
     ...snapshot,
-    quotaSummary: summarizeQuota(snapshot.monthUsage, snapshot.planUsage),
+    quotaSummary: summarizeQuota(snapshot.monthUsage, snapshot.planUsage, snapshot.balance),
     overallPercent,
     status: calculateUsageStatus(buckets, settings)
   };
@@ -77,7 +87,8 @@ export function snapshotWithStatus(
 function quotaSource(
   tokenPlanBuckets: TokenBucket[],
   otherLimitedBuckets: TokenBucket[],
-  allBuckets: TokenBucket[]
+  allBuckets: TokenBucket[],
+  balance?: BalanceSnapshot
 ): QuotaSummary['source'] {
   if (tokenPlanBuckets.length > 0 && otherLimitedBuckets.length > 0) {
     return 'mixed';
@@ -85,25 +96,24 @@ function quotaSource(
   if (tokenPlanBuckets.length > 0) {
     return 'token_plan';
   }
-  if (allBuckets.length > 0) {
+  if (balance) {
     return 'api_key';
+  }
+  if (allBuckets.length > 0) {
+    return 'unknown';
   }
   return 'unknown';
 }
 
 function selectPrimaryQuotaBucket(
   tokenPlanBuckets: TokenBucket[],
-  otherLimitedBuckets: TokenBucket[],
-  allBuckets: TokenBucket[]
+  otherLimitedBuckets: TokenBucket[]
 ): TokenBucket | undefined {
   return (
     tokenPlanBuckets.find((bucket) => bucket.name === 'plan_total_token') ??
     tokenPlanBuckets.find((bucket) => bucket.name === 'month_total_token') ??
     highestPercentBucket(tokenPlanBuckets) ??
-    highestPercentBucket(otherLimitedBuckets) ??
-    allBuckets.find((bucket) => bucket.name === 'plan_total_token') ??
-    allBuckets.find((bucket) => bucket.name === 'month_total_token') ??
-    highestPercentBucket(allBuckets)
+    highestPercentBucket(otherLimitedBuckets)
   );
 }
 
@@ -118,4 +128,8 @@ function highestPercentBucket(buckets: TokenBucket[]): TokenBucket | undefined {
 
 function isTokenPlanBucket(bucket: TokenBucket): boolean {
   return bucket.name === 'plan_total_token' || bucket.name === 'month_total_token';
+}
+
+function balanceAvailable(balance: BalanceSnapshot): number {
+  return Math.max(balance.balance, 0) + Math.max(balance.remainingOverdraftLimit, 0);
 }

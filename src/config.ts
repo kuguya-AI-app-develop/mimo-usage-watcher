@@ -40,19 +40,30 @@ const QuotaSummarySchema = z.object({
   remaining: z.number()
 });
 
+const BalanceSnapshotSchema = z.object({
+  balance: z.number(),
+  cashBalance: z.number(),
+  giftBalance: z.number(),
+  frozenBalance: z.number(),
+  overdraftLimit: z.number(),
+  remainingOverdraftLimit: z.number(),
+  currency: z.string().optional()
+});
+
 const UsageSnapshotSchema = z
   .object({
     accountId: z.string(),
     fetchedAt: z.string(),
     monthUsage: z.array(TokenBucketSchema),
     planUsage: z.array(TokenBucketSchema),
+    balance: BalanceSnapshotSchema.optional(),
     quotaSummary: QuotaSummarySchema.optional(),
     overallPercent: z.number(),
     status: z.enum(['ok', 'warn', 'critical', 'stale', 'login required', 'unknown'])
   })
   .transform((snapshot) => ({
     ...snapshot,
-    quotaSummary: snapshot.quotaSummary ?? summarizeQuota(snapshot.monthUsage, snapshot.planUsage)
+    quotaSummary: snapshot.quotaSummary ?? summarizeQuota(snapshot.monthUsage, snapshot.planUsage, snapshot.balance)
   }));
 
 const SettingsSchema = z.object({

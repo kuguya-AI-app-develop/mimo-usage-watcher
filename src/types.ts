@@ -29,6 +29,16 @@ export interface TokenBucket {
 
 export type QuotaSource = 'token_plan' | 'api_key' | 'mixed' | 'unknown';
 
+export interface BalanceSnapshot {
+  balance: number;
+  cashBalance: number;
+  giftBalance: number;
+  frozenBalance: number;
+  overdraftLimit: number;
+  remainingOverdraftLimit: number;
+  currency?: string;
+}
+
 export interface QuotaSummary {
   source: QuotaSource;
   used: number;
@@ -42,6 +52,7 @@ export interface UsageSnapshot {
   fetchedAt: string;
   monthUsage: TokenBucket[];
   planUsage: TokenBucket[];
+  balance?: BalanceSnapshot;
   quotaSummary: QuotaSummary;
   overallPercent: number;
   status: UsageStatus;

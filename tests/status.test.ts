@@ -125,11 +125,36 @@ describe('usage status', () => {
           limit: 0,
           percent: 0
         })
-      ]
+      ],
+      {
+        balance: 12.5,
+        cashBalance: 10,
+        giftBalance: 2.5,
+        frozenBalance: 0,
+        overdraftLimit: 100,
+        remainingOverdraftLimit: 80,
+        currency: 'CNY'
+      }
     );
 
     expect(quota.source).toBe('api_key');
     expect(quota.limit).toBe(0);
-    expect(quota.remaining).toBe(0);
+    expect(quota.remaining).toBe(92.5);
+  });
+
+  it('does not assume API key billing without balance data', () => {
+    const quota = summarizeQuota(
+      [],
+      [
+        normalizeBucket({
+          name: 'compensation_total_token',
+          used: 0,
+          limit: 0,
+          percent: 0
+        })
+      ]
+    );
+
+    expect(quota.source).toBe('unknown');
   });
 });

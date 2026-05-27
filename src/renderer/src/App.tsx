@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CircleAlert,
   CircleCheck,
@@ -30,6 +30,7 @@ export function App(): React.ReactElement {
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Loading local account data...');
+  const refreshInFlightRef = useRef(false);
 
   const accounts = useMemo(() => filterAccounts(config.accounts, query), [config.accounts, query]);
   const selected = accounts.find((account) => account.id === selectedId) ?? accounts[0];
@@ -41,9 +42,31 @@ export function App(): React.ReactElement {
       const next = await unwrap(await window.mimo.load());
       setConfig(next);
       setSelectedId(next.settings.defaultAccountId ?? next.accounts[0]?.id);
-      setStatus(next.accounts.length ? 'Ready. Refresh to update token usage.' : 'No accounts yet. Add a MiMo account to begin.');
+      setStatus(
+        next.accounts.length
+          ? `Ready. Auto-refreshing every ${next.settings.refreshIntervalSeconds}s.`
+          : 'No accounts yet. Add a MiMo account to begin.'
+      );
+      if (next.accounts.length > 0) {
+        window.setTimeout(() => {
+          void refreshAll('auto');
+        }, 0);
+      }
     }, false);
   }, []);
+
+  useEffect(() => {
+    if (config.accounts.length === 0) {
+      return;
+    }
+    const intervalSeconds = Math.max(config.settings.refreshIntervalSeconds, 15);
+    const timer = window.setInterval(() => {
+      void refreshAll('auto');
+    }, intervalSeconds * 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [config.accounts.length, config.settings.refreshIntervalSeconds]);
 
   async function run(action: () => Promise<void>, showBusy = true): Promise<void> {
     if (showBusy) {
@@ -60,13 +83,26 @@ export function App(): React.ReactElement {
     }
   }
 
-  async function refreshAll(): Promise<void> {
-    await run(async () => {
-      setStatus('Refreshing all accounts...');
-      const next = await unwrap(await window.mimo.refreshAll());
-      setConfig(next);
-      setStatus(`Refreshed ${next.accounts.length} account${next.accounts.length === 1 ? '' : 's'}.`);
-    });
+  async function refreshAll(mode: 'manual' | 'auto' = 'manual'): Promise<void> {
+    if (refreshInFlightRef.current) {
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    await run(
+      async () => {
+        setStatus(mode === 'manual' ? 'Refreshing all accounts...' : 'Auto-refreshing all accounts...');
+        const next = await unwrap(await window.mimo.refreshAll());
+        setConfig(next);
+        setStatus(
+          `${mode === 'manual' ? 'Refreshed' : 'Auto-refreshed'} ${next.accounts.length} account${
+            next.accounts.length === 1 ? '' : 's'
+          } at ${shortTime(new Date().toISOString())}.`
+        );
+      },
+      mode === 'manual'
+    );
+    refreshInFlightRef.current = false;
   }
 
   async function setDefault(account: Account): Promise<void> {
@@ -120,7 +156,7 @@ export function App(): React.ReactElement {
           <h1>Plan Watcher</h1>
         </div>
         <div className="topbar-actions">
-          <button className="button secondary" onClick={refreshAll} disabled={busy || config.accounts.length === 0}>
+          <button className="button secondary" onClick={() => void refreshAll()} disabled={busy || config.accounts.length === 0}>
             <RefreshCw size={17} />
             Refresh
           </button>
@@ -309,7 +345,9 @@ function AccountDetail({
         <span>{snapshot ? `${snapshot.overallPercent}% overall usage` : 'No usage snapshot yet'}</span>
         <span>
           {snapshot
-            ? quota && quota.limit > 0
+            ? quota?.source === 'api_key' && snapshot.balance
+              ? `${formatMoney(balanceAvailable(snapshot.balance), snapshot.balance.currency)} API balance`
+              : quota && quota.limit > 0
               ? `${formatCompactNumber(quota.remaining)} credits remaining`
               : 'No token-plan limit'
             : 'Quota unknown'}
@@ -340,6 +378,9 @@ function AccountDetail({
 
 function QuotaOverview({ snapshot }: { snapshot: UsageSnapshot }): React.ReactElement {
   const quota = snapshot.quotaSummary;
+  if (quota.source === 'api_key' && snapshot.balance) {
+    return <BalanceOverview balance={snapshot.balance} />;
+  }
 
   return (
     <section className="quota-overview">
@@ -357,6 +398,32 @@ function QuotaOverview({ snapshot }: { snapshot: UsageSnapshot }): React.ReactEl
         <QuotaMetric label="Used" value={formatNumber(quota.used)} />
         <QuotaMetric label="Limit" value={quota.limit > 0 ? formatNumber(quota.limit) : 'No token-plan limit'} />
         <QuotaMetric label="Remaining" value={quota.limit > 0 ? formatNumber(quota.remaining) : '-'} />
+      </div>
+    </section>
+  );
+}
+
+function BalanceOverview({ balance }: { balance: NonNullable<UsageSnapshot['balance']> }): React.ReactElement {
+  const available = balanceAvailable(balance);
+
+  return (
+    <section className="quota-overview">
+      <div className="quota-overview-main">
+        <div>
+          <div className="eyebrow">Quota Source</div>
+          <h3>API Key / Balance</h3>
+        </div>
+        <strong>{formatMoney(available, balance.currency)}</strong>
+      </div>
+      <div className="quota-metrics">
+        <QuotaMetric label="Account Balance" value={formatMoney(balance.balance, balance.currency)} />
+        <QuotaMetric label="Cash" value={formatMoney(balance.cashBalance, balance.currency)} />
+        <QuotaMetric label="Gift" value={formatMoney(balance.giftBalance, balance.currency)} />
+        <QuotaMetric label="Frozen" value={formatMoney(balance.frozenBalance, balance.currency)} />
+        <QuotaMetric
+          label="Credit"
+          value={`${formatMoney(balance.remainingOverdraftLimit, balance.currency)} / ${formatMoney(balance.overdraftLimit, balance.currency)}`}
+        />
       </div>
     </section>
   );
@@ -532,6 +599,18 @@ function sourceLabel(source: UsageSnapshot['quotaSummary']['source'] | 'unknown'
     default:
       return 'Unknown source';
   }
+}
+
+function balanceAvailable(balance: NonNullable<UsageSnapshot['balance']>): number {
+  return Math.max(balance.balance, 0) + Math.max(balance.remainingOverdraftLimit, 0);
+}
+
+function formatMoney(value: number, currency = 'CNY'): string {
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2
+  }).format(value);
+  return `${currency} ${formatted}`;
 }
 
 function filterAccounts(accounts: Account[], query: string): Account[] {

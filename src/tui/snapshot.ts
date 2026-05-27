@@ -83,6 +83,9 @@ export function renderAccountDetails(account: Account, snapshot?: UsageSnapshot)
   lines.push(
     `  Quota source: ${snapshot.quotaSummary.source} | remaining: ${snapshot.quotaSummary.remaining}`
   );
+  if (snapshot.balance) {
+    lines.push(`  API balance: ${snapshot.balance.currency || 'CNY'} ${snapshot.balance.balance}`);
+  }
   lines.push('  Month usage:');
   if (snapshot.monthUsage.length === 0) {
     lines.push('    -');
