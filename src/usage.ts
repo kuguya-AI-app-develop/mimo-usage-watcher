@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { BALANCE_URL, USAGE_URL } from './constants.js';
-import type { BalanceSnapshot, Settings, TokenBucket, UsageSnapshot } from './types.js';
+import { BALANCE_URL, TOKEN_PLAN_DETAIL_URL, USAGE_URL } from './constants.js';
+import type { BalanceSnapshot, Settings, TokenBucket, TokenPlanDetail, UsageSnapshot } from './types.js';
 import { normalizeBucket, snapshotWithStatus } from './utils/status.js';
 
 const ApiAmountSchema = z.union([z.number(), z.string()]).transform((value) => {
@@ -48,6 +48,33 @@ const BalanceResponseSchema = z.object({
   data: BalanceDataSchema
 });
 
+const ApiOptionalStringSchema = z
+  .string()
+  .nullish()
+  .transform((value) => value ?? undefined);
+
+const ApiOptionalBooleanSchema = z
+  .boolean()
+  .nullish()
+  .transform((value) => value ?? undefined);
+
+const TokenPlanDetailDataSchema = z
+  .object({
+    planCode: ApiOptionalStringSchema,
+    planName: ApiOptionalStringSchema,
+    currentPeriodEnd: ApiOptionalStringSchema,
+    expired: ApiOptionalBooleanSchema,
+    hasAutoRenewSubscribed: ApiOptionalBooleanSchema,
+    enableAutoRenew: ApiOptionalBooleanSchema
+  })
+  .passthrough();
+
+const TokenPlanDetailResponseSchema = z.object({
+  code: z.number(),
+  message: z.string().optional().default(''),
+  data: TokenPlanDetailDataSchema.nullish()
+});
+
 export type UsageErrorKind = 'auth' | 'api' | 'network' | 'schema';
 
 export class MimoUsageError extends Error {
@@ -89,20 +116,29 @@ export async function fetchUsageSnapshot(options: FetchUsageOptions): Promise<Us
     balanceError = asMimoUsageError(error);
   }
 
-  if (tokenUsage || balance) {
+  let tokenPlan: TokenPlanDetail | undefined;
+  let tokenPlanError: MimoUsageError | undefined;
+  try {
+    tokenPlan = await fetchTokenPlanDetail(options);
+  } catch (error) {
+    tokenPlanError = asMimoUsageError(error);
+  }
+
+  if (tokenUsage || balance || tokenPlan) {
     return snapshotWithStatus(
       {
         accountId: options.accountId,
         fetchedAt: new Date().toISOString(),
         monthUsage: tokenUsage?.monthUsage ?? [],
         planUsage: tokenUsage?.planUsage ?? [],
-        balance
+        balance,
+        tokenPlan
       },
       options.settings
     );
   }
 
-  throw preferUsageError(tokenError, balanceError);
+  throw preferUsageError(tokenError, balanceError, tokenPlanError);
 }
 
 async function fetchTokenUsage(options: FetchUsageOptions): Promise<{ monthUsage: TokenBucket[]; planUsage: TokenBucket[] }> {
@@ -142,6 +178,29 @@ async function fetchBalance(options: FetchUsageOptions): Promise<BalanceSnapshot
   }
 
   return parsed.data.data;
+}
+
+async function fetchTokenPlanDetail(options: FetchUsageOptions): Promise<TokenPlanDetail | undefined> {
+  const response = await fetchJson(options, TOKEN_PLAN_DETAIL_URL, 'Token plan detail API');
+
+  const parsed = TokenPlanDetailResponseSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new MimoUsageError('schema', 'Token plan detail API response did not match expected schema', parsed.error);
+  }
+
+  if (parsed.data.code !== 0) {
+    throw new MimoUsageError(
+      parsed.data.code === 401 || parsed.data.code === 403 ? 'auth' : 'api',
+      parsed.data.message || `Token plan detail API returned code ${parsed.data.code}`
+    );
+  }
+
+  const detail = parsed.data.data ?? undefined;
+  if (!detail || !hasTokenPlanDetail(detail)) {
+    return undefined;
+  }
+
+  return detail;
 }
 
 async function fetchJson(options: FetchUsageOptions, url: string, label: string): Promise<unknown> {
@@ -184,12 +243,24 @@ function asMimoUsageError(error: unknown): MimoUsageError {
 
 function preferUsageError(
   tokenError: MimoUsageError | undefined,
-  balanceError: MimoUsageError | undefined
+  balanceError: MimoUsageError | undefined,
+  tokenPlanError?: MimoUsageError
 ): MimoUsageError {
-  const errors = [tokenError, balanceError].filter((error): error is MimoUsageError => Boolean(error));
+  const errors = [tokenError, balanceError, tokenPlanError].filter((error): error is MimoUsageError => Boolean(error));
   const authError = errors.find((error) => error.kind === 'auth');
   if (authError) {
     return authError;
   }
-  return tokenError ?? balanceError ?? new MimoUsageError('api', 'Usage and balance APIs did not return data');
+  return tokenError ?? balanceError ?? tokenPlanError ?? new MimoUsageError('api', 'Usage and balance APIs did not return data');
+}
+
+function hasTokenPlanDetail(detail: TokenPlanDetail): boolean {
+  return Boolean(
+    detail.planCode ||
+      detail.planName ||
+      detail.currentPeriodEnd ||
+      detail.expired !== undefined ||
+      detail.hasAutoRenewSubscribed !== undefined ||
+      detail.enableAutoRenew !== undefined
+  );
 }

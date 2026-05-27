@@ -142,6 +142,36 @@ describe('usage status', () => {
     expect(quota.remaining).toBe(92.5);
   });
 
+  it('marks accounts with token-plan quota and balance data as mixed quota', () => {
+    const quota = summarizeQuota(
+      [],
+      [
+        normalizeBucket({
+          name: 'plan_total_token',
+          used: 20,
+          limit: 100,
+          percent: 20
+        })
+      ],
+      {
+        balance: 12.5,
+        cashBalance: 10,
+        giftBalance: 2.5,
+        frozenBalance: 0,
+        overdraftLimit: 100,
+        remainingOverdraftLimit: 80,
+        currency: 'CNY'
+      }
+    );
+
+    expect(quota).toMatchObject({
+      source: 'mixed',
+      used: 20,
+      limit: 100,
+      remaining: 80
+    });
+  });
+
   it('does not assume API key billing without balance data', () => {
     const quota = summarizeQuota(
       [],

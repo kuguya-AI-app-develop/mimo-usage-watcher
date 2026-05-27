@@ -90,7 +90,7 @@ function quotaSource(
   allBuckets: TokenBucket[],
   balance?: BalanceSnapshot
 ): QuotaSummary['source'] {
-  if (tokenPlanBuckets.length > 0 && otherLimitedBuckets.length > 0) {
+  if (tokenPlanBuckets.length > 0 && (otherLimitedBuckets.length > 0 || balance)) {
     return 'mixed';
   }
   if (tokenPlanBuckets.length > 0) {

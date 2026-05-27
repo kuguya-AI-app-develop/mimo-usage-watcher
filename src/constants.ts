@@ -4,6 +4,7 @@ export const DEFAULT_CONFIG_DIR_NAME = '.mimo-watcher';
 export const PLATFORM_ORIGIN = 'https://platform.xiaomimimo.com';
 export const LOGIN_ENTRY_URL = `${PLATFORM_ORIGIN}/console/balance`;
 export const USAGE_URL = `${PLATFORM_ORIGIN}/api/v1/tokenPlan/usage`;
+export const TOKEN_PLAN_DETAIL_URL = `${PLATFORM_ORIGIN}/api/v1/tokenPlan/detail`;
 export const BALANCE_URL = `${PLATFORM_ORIGIN}/api/v1/balance`;
 
 export const REQUIRED_COOKIE_NAMES = [

@@ -39,6 +39,15 @@ export interface BalanceSnapshot {
   currency?: string;
 }
 
+export interface TokenPlanDetail {
+  planCode?: string;
+  planName?: string;
+  currentPeriodEnd?: string;
+  expired?: boolean;
+  hasAutoRenewSubscribed?: boolean;
+  enableAutoRenew?: boolean;
+}
+
 export interface QuotaSummary {
   source: QuotaSource;
   used: number;
@@ -53,6 +62,7 @@ export interface UsageSnapshot {
   monthUsage: TokenBucket[];
   planUsage: TokenBucket[];
   balance?: BalanceSnapshot;
+  tokenPlan?: TokenPlanDetail;
   quotaSummary: QuotaSummary;
   overallPercent: number;
   status: UsageStatus;

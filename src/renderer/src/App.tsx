@@ -226,7 +226,7 @@ export function App(): React.ReactElement {
             <div className="empty-detail">
               <CircleCheck size={30} />
               <h2>No account selected</h2>
-              <p>Use Login & Import to add a Xiaomi MiMo account and fetch its token plan usage.</p>
+              <p>Use Login & Import to add a Xiaomi MiMo account and fetch token plan usage plus API key balance.</p>
             </div>
           )}
         </section>
@@ -316,7 +316,7 @@ function AccountDetail({
   onEdit: () => void;
   onDelete: () => void;
 }): React.ReactElement {
-  const quota = snapshot?.quotaSummary;
+  const tokenPlanLabel = snapshot ? resolveTokenPlanLabel(snapshot) : undefined;
 
   return (
     <>
@@ -341,17 +341,14 @@ function AccountDetail({
 
       <div className="detail-status-row">
         <StatusPill status={snapshot?.status ?? 'unknown'} />
-        <SourcePill source={quota?.source ?? 'unknown'} />
-        <span>{snapshot ? `${snapshot.overallPercent}% overall usage` : 'No usage snapshot yet'}</span>
-        <span>
-          {snapshot
-            ? quota?.source === 'api_key' && snapshot.balance
-              ? `${formatMoney(balanceAvailable(snapshot.balance), snapshot.balance.currency)} API balance`
-              : quota && quota.limit > 0
-              ? `${formatCompactNumber(quota.remaining)} credits remaining`
-              : 'No token-plan limit'
-            : 'Quota unknown'}
-        </span>
+        {tokenPlanLabel ? (
+          <span className={`source-pill token-plan ${snapshot?.tokenPlan?.expired ? 'expired' : ''}`}>{tokenPlanLabel}</span>
+        ) : null}
+        {snapshot?.balance ? (
+          <span className="source-pill api-key">API Balance {formatMoney(snapshot.balance.balance, snapshot.balance.currency)}</span>
+        ) : null}
+        {snapshot && !tokenPlanLabel && !snapshot.balance ? <span>No quota data</span> : null}
+        {!snapshot ? <span>No usage snapshot yet</span> : null}
         <span>{account.isDefault ? 'Default account' : 'Secondary account'}</span>
       </div>
 
@@ -359,7 +356,7 @@ function AccountDetail({
 
       {snapshot ? (
         <>
-          <QuotaOverview snapshot={snapshot} />
+          {snapshot.balance ? <BalanceOverview balance={snapshot.balance} /> : null}
           <div className="usage-grid">
             <UsageSection title="Month Usage" buckets={snapshot.monthUsage} />
             <UsageSection title="Plan Usage" buckets={snapshot.planUsage} />
@@ -368,38 +365,11 @@ function AccountDetail({
       ) : (
         <div className="empty-detail inline">
           <CircleAlert size={28} />
-          <h3>No token usage saved</h3>
-          <p>Refresh this account after login to fetch the latest MiMo token plan data.</p>
+          <h3>No usage saved</h3>
+          <p>Refresh this account after login to fetch token plan usage and API key balance data.</p>
         </div>
       )}
     </>
-  );
-}
-
-function QuotaOverview({ snapshot }: { snapshot: UsageSnapshot }): React.ReactElement {
-  const quota = snapshot.quotaSummary;
-  if (quota.source === 'api_key' && snapshot.balance) {
-    return <BalanceOverview balance={snapshot.balance} />;
-  }
-
-  return (
-    <section className="quota-overview">
-      <div className="quota-overview-main">
-        <div>
-          <div className="eyebrow">Quota Source</div>
-          <h3>{sourceLabel(quota.source)}</h3>
-        </div>
-        <strong>{quota.percent}%</strong>
-      </div>
-      <div className="progress-track">
-        <div className={`progress-fill ${statusClass(snapshot.status)}`} style={{ width: `${Math.min(quota.percent, 100)}%` }} />
-      </div>
-      <div className="quota-metrics">
-        <QuotaMetric label="Used" value={formatNumber(quota.used)} />
-        <QuotaMetric label="Limit" value={quota.limit > 0 ? formatNumber(quota.limit) : 'No token-plan limit'} />
-        <QuotaMetric label="Remaining" value={quota.limit > 0 ? formatNumber(quota.remaining) : '-'} />
-      </div>
-    </section>
   );
 }
 
@@ -410,13 +380,13 @@ function BalanceOverview({ balance }: { balance: NonNullable<UsageSnapshot['bala
     <section className="quota-overview">
       <div className="quota-overview-main">
         <div>
-          <div className="eyebrow">Quota Source</div>
-          <h3>API Key / Balance</h3>
+          <div className="eyebrow">API Key Balance</div>
+          <h3>Account Balance</h3>
         </div>
-        <strong>{formatMoney(available, balance.currency)}</strong>
+        <strong>{formatMoney(balance.balance, balance.currency)}</strong>
       </div>
       <div className="quota-metrics">
-        <QuotaMetric label="Account Balance" value={formatMoney(balance.balance, balance.currency)} />
+        <QuotaMetric label="Available" value={formatMoney(available, balance.currency)} />
         <QuotaMetric label="Cash" value={formatMoney(balance.cashBalance, balance.currency)} />
         <QuotaMetric label="Gift" value={formatMoney(balance.giftBalance, balance.currency)} />
         <QuotaMetric label="Frozen" value={formatMoney(balance.frozenBalance, balance.currency)} />
@@ -439,16 +409,18 @@ function QuotaMetric({ label, value }: { label: string; value: string }): React.
 }
 
 function UsageSection({ title, buckets }: { title: string; buckets: TokenBucket[] }): React.ReactElement {
+  const visibleBuckets = buckets.filter(shouldShowBucket);
+
   return (
     <section className="usage-section">
       <h3>{title}</h3>
-      {buckets.length === 0 ? (
+      {visibleBuckets.length === 0 ? (
         <p className="muted">No buckets returned.</p>
       ) : (
-        buckets.map((bucket) => (
+        visibleBuckets.map((bucket) => (
           <div className="bucket-row" key={bucket.name}>
             <div className="bucket-header">
-              <span>{bucket.name}</span>
+              <span title={bucketHelp(bucket.name)}>{bucketLabel(bucket.name)}</span>
               <strong>{bucket.percent}%</strong>
             </div>
             <div className="progress-track">
@@ -584,21 +556,64 @@ function StatusPill({ status }: { status: UsageStatus | 'unknown' }): React.Reac
   );
 }
 
-function SourcePill({ source }: { source: UsageSnapshot['quotaSummary']['source'] | 'unknown' }): React.ReactElement {
-  return <span className={`source-pill ${source.replace(/_/g, '-')}`}>{sourceLabel(source)}</span>;
+function resolveTokenPlanLabel(snapshot: UsageSnapshot): string | undefined {
+  const detail = snapshot.tokenPlan;
+  const planLabel = detail?.planCode ? planCodeLabel(detail.planCode) : undefined;
+  const fallbackLabel = detail?.planName || (snapshot.quotaSummary.limit > 0 ? 'Token Plan' : undefined);
+  const label = planLabel || fallbackLabel;
+
+  if (!label) {
+    return undefined;
+  }
+
+  return detail?.expired ? `Expired ${label}` : label;
 }
 
-function sourceLabel(source: UsageSnapshot['quotaSummary']['source'] | 'unknown'): string {
-  switch (source) {
-    case 'token_plan':
-      return 'Token Plan';
-    case 'api_key':
-      return 'API Key / Balance';
-    case 'mixed':
-      return 'Mixed quota';
+function planCodeLabel(planCode: string): string {
+  const normalized = planCode.trim().toLowerCase().replace(/[:\s-]+/g, '_');
+  const annual = normalized.endsWith('_year') || normalized.includes('annual');
+  const base = normalized.replace(/_?year$/, '').replace(/_?annual$/, '');
+  const known: Record<string, string> = {
+    lite: 'Lite',
+    standard: 'Standard',
+    pro: 'Pro',
+    max: 'Max',
+    trial: 'Trial',
+    free: 'Free'
+  };
+  const label =
+    known[base] ??
+    base
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+
+  return annual && label ? `${label} Annual` : label || 'Token Plan';
+}
+
+function shouldShowBucket(bucket: TokenBucket): boolean {
+  return !(bucket.name === 'compensation_total_token' && bucket.limit === 0);
+}
+
+function bucketLabel(name: string): string {
+  switch (name) {
+    case 'month_total_token':
+      return 'Monthly total';
+    case 'plan_total_token':
+      return 'Plan total';
+    case 'compensation_total_token':
+      return 'Compensation credits';
     default:
-      return 'Unknown source';
+      return name;
   }
+}
+
+function bucketHelp(name: string): string | undefined {
+  if (name === 'compensation_total_token') {
+    return 'Extra credits granted by MiMo when plan changes create a price difference.';
+  }
+  return undefined;
 }
 
 function balanceAvailable(balance: NonNullable<UsageSnapshot['balance']>): number {

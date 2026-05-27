@@ -50,6 +50,15 @@ const BalanceSnapshotSchema = z.object({
   currency: z.string().optional()
 });
 
+const TokenPlanDetailSchema = z.object({
+  planCode: z.string().optional(),
+  planName: z.string().optional(),
+  currentPeriodEnd: z.string().optional(),
+  expired: z.boolean().optional(),
+  hasAutoRenewSubscribed: z.boolean().optional(),
+  enableAutoRenew: z.boolean().optional()
+});
+
 const UsageSnapshotSchema = z
   .object({
     accountId: z.string(),
@@ -57,6 +66,7 @@ const UsageSnapshotSchema = z
     monthUsage: z.array(TokenBucketSchema),
     planUsage: z.array(TokenBucketSchema),
     balance: BalanceSnapshotSchema.optional(),
+    tokenPlan: TokenPlanDetailSchema.optional(),
     quotaSummary: QuotaSummarySchema.optional(),
     overallPercent: z.number(),
     status: z.enum(['ok', 'warn', 'critical', 'stale', 'login required', 'unknown'])
