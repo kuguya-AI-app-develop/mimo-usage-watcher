@@ -16,6 +16,7 @@ export interface Account {
   createdAt: string;
   updatedAt: string;
   lastRefreshAt?: string;
+  refreshRequestId?: string;
   lastError?: string;
 }
 

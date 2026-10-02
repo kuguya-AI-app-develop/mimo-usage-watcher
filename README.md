@@ -30,6 +30,18 @@ The app does not read Chrome or Safari profiles and does not store Xiaomi
 account passwords. Full API keys are never written to `config.json`; only their
 labels and masked values are saved there.
 
+Configuration changes use a read/modify/write transaction shared by all stores
+in a process and an exclusive `config.json.lock` file across GUI/TUI processes.
+Network refreshes run outside the lock; an account's latest refresh request ID
+prevents earlier responses from replacing a newer result or restoring a deleted
+account. Raw `ConfigStore.save` replaces a whole config; callers changing current
+data should use `ConfigStore.update` instead.
+
+A competing process waits up to 10 seconds for the lock, then reports an error
+without writing. If a process crashes during a transaction, close **all** watcher
+processes before removing the leftover `config.json.lock` in the data directory.
+The app never automatically steals a lock from another process.
+
 ## Commands
 
 ```sh
@@ -38,6 +50,7 @@ pnpm build        # TypeScript + renderer production build
 pnpm start        # Run the built Electron GUI
 pnpm dist:mac     # Build an unsigned macOS DMG under release/
 pnpm test
+pnpm test:electron # Build + native Electron bridge smoke test with an empty temporary data directory
 pnpm typecheck
 pnpm dev:tui      # Legacy terminal UI
 ```

@@ -1,4 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { dirname, join, resolve } from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
@@ -21,6 +23,7 @@ const AccountSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   lastRefreshAt: z.string().optional(),
+  refreshRequestId: z.string().optional(),
   lastError: z.string().optional()
 });
 
@@ -101,6 +104,9 @@ const ConfigSchema = z.object({
   snapshots: z.record(z.string(), UsageSnapshotSchema).default({})
 });
 
+// Share the queue across store/service instances using the same configuration file.
+const writeQueues = new Map<string, Promise<void>>();
+
 export class ConfigStore {
   readonly dataDir: string;
   readonly configPath: string;
@@ -123,15 +129,62 @@ export class ConfigStore {
   }
 
   async save(config: AppConfig): Promise<AppConfig> {
+    return this.withWriteLock(() => this.writeConfig(config));
+  }
+
+  async update(mutator: (config: AppConfig) => AppConfig | Promise<AppConfig>): Promise<AppConfig> {
+    return this.withWriteLock(async () => this.writeConfig(await mutator(await this.load())));
+  }
+
+  private async writeConfig(config: AppConfig): Promise<AppConfig> {
     const normalized = normalizeConfig(config, this.dataDir);
-    await mkdir(dirname(this.configPath), { recursive: true, mode: 0o700 });
-    const tempPath = `${this.configPath}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(tempPath, `${JSON.stringify(normalized, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600
-    });
-    await rename(tempPath, this.configPath);
-    return normalized;
+    const tempPath = `${this.configPath}.${process.pid}.${randomUUID()}.tmp`;
+    const tempFile = await open(tempPath, 'wx', 0o600);
+    try {
+      await tempFile.writeFile(`${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
+      await tempFile.close();
+      await rename(tempPath, this.configPath);
+      return normalized;
+    } finally {
+      await tempFile.close();
+      await unlink(tempPath).catch((error: unknown) => { if (!isNotFoundError(error)) throw error; });
+    }
+  }
+
+  private async withWriteLock<T>(action: () => Promise<T>): Promise<T> {
+    const previous = writeQueues.get(this.configPath) ?? Promise.resolve();
+    let release!: () => void;
+    const tail = new Promise<void>((resolve) => { release = resolve; });
+    writeQueues.set(this.configPath, tail);
+    await previous;
+    try {
+      await mkdir(dirname(this.configPath), { recursive: true, mode: 0o700 });
+      const lockPath = `${this.configPath}.lock`;
+      // An exclusive lock file also coordinates GUI, TUI and other processes.
+      // Never steal an existing lock: a slow owner could still be committing.
+      let lockFile;
+      for (let attempt = 0; !lockFile; attempt += 1) {
+        try {
+          lockFile = await open(lockPath, 'wx', 0o600);
+        } catch (error) {
+          if (!hasErrorCode(error, 'EEXIST')) throw error;
+          if (attempt >= 100) {
+            throw new Error(`Configuration is locked: ${lockPath}. Close other watcher processes; if a previous process crashed, remove this lock only after all watcher processes have exited.`);
+          }
+          await delay(100);
+        }
+      }
+      try {
+        await lockFile.writeFile(`${JSON.stringify({ pid: process.pid })}\n`, 'utf8');
+        return await action();
+      } finally {
+        await lockFile.close();
+        await unlink(lockPath);
+      }
+    } finally {
+      release();
+      if (writeQueues.get(this.configPath) === tail) writeQueues.delete(this.configPath);
+    }
   }
 
   profileDirFor(accountId: string): string {
@@ -222,10 +275,14 @@ export function upsertAccount(config: AppConfig, account: Account): AppConfig {
 }
 
 function isNotFoundError(error: unknown): boolean {
+  return hasErrorCode(error, 'ENOENT');
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(
     error &&
       typeof error === 'object' &&
       'code' in error &&
-      (error as { code?: string }).code === 'ENOENT'
+      (error as { code?: string }).code === code
   );
 }

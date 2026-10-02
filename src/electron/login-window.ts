@@ -33,11 +33,11 @@ export async function waitForElectronLogin(options: ElectronLoginOptions): Promi
     activeLoginWindows.delete(loginWindow);
   });
 
-  options.onStatus?.('Opening Xiaomi MiMo login window...');
-  await loginWindow.loadURL(LOGIN_ENTRY_URL);
-  options.onStatus?.('Complete Xiaomi login in the popup window.');
-
   try {
+    options.onStatus?.('Opening Xiaomi MiMo login window...');
+    await loginWindow.loadURL(LOGIN_ENTRY_URL);
+    options.onStatus?.('Complete Xiaomi login in the popup window.');
+
     const deadline = Date.now() + timeoutMs;
     let lastError: Error | null = null;
 

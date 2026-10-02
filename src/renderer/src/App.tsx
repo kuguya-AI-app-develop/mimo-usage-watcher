@@ -373,7 +373,7 @@ function AccountDetail({
   onDeleteApiKey: (apiKey: ApiKeyRef) => void;
 }): React.ReactElement {
   const tokenPlanLabel = snapshot ? resolveTokenPlanLabel(snapshot) : undefined;
-  const hasApiBalance = snapshot?.balance ? balanceAvailable(snapshot.balance) > 0 : false;
+  const hasApiBalance = snapshot?.balance !== undefined;
 
   return (
     <>
