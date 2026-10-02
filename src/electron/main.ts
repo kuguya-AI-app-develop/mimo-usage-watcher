@@ -27,7 +27,7 @@ async function createWindow(): Promise<void> {
     backgroundColor: '#f6f7f9',
     show: false,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false

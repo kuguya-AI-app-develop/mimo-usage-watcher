@@ -15,6 +15,6 @@
     "declaration": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.mts"],
   "exclude": ["dist", "node_modules"]
 }
